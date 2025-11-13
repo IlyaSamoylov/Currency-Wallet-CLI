@@ -12,6 +12,18 @@ python = "^3.12"
 [tool.poetry.scripts]
 project = "valutatrade_hub.main:main"
 
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.14.4"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+exclude = ["venv", ".venv", "dist", "__pycache__"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = []
