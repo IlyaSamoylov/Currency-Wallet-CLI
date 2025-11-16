@@ -1,10 +1,14 @@
-import secrets, hashlib, datetime
+import datetime
+import hashlib
+import secrets
 
-from valutatrade_hub.core.utils import save, load, set_session, get_session, get_user
-from valutatrade_hub.constants import USERS_DIR, PORTFOLIOS_DIR, RATES_DIR, VALUTA
+from valutatrade_hub.constants import PORTFOLIOS_DIR, RATES_DIR, USERS_DIR, VALUTA
+from valutatrade_hub.core.utils import get_session, get_user, load, save, set_session
+
 
 # TODO: переписать в вообще все, теперь с классами(
 def register(username:  str, password: str):
+
 	users_lst = load(USERS_DIR)
 
 	# если вернет None, то есть неизвестный путь
@@ -28,23 +32,22 @@ def register(username:  str, password: str):
 		"hashed_password": hash_pword,
 		"salt": salt,
 		"registration_date": reg_date
-	            }
+        }
 	users_lst.append(new_user)
 	save(USERS_DIR, users_lst)
 
 	user_portfolio = {
 		"user_id": user_id,
 		"wallets": {}
-	                  }
+        }
 
 	portfolios_lst = load(PORTFOLIOS_DIR)
 	portfolios_lst.append(user_portfolio)
 	save(PORTFOLIOS_DIR, portfolios_lst)
 	print(f"Пользователь '{username}' зарегистрирован (id={user_id}). "
-	      f"Войдите: login --username {username} --password", len(password)*"*")
+            f"Войдите: login --username {username} --password", len(password)*"*")
 
 def login(username: str, password: str):
-	users_lst = load(USERS_DIR)
 	user = get_user(username)
 
 	if user is None:
@@ -73,16 +76,19 @@ def show_portfolio(base: str | None  = 'USD'):
 		return
 
 	log_user_id = session["user_id"]
+	log_username = session["username"]
 
 	portfolios = load(PORTFOLIOS_DIR)
 	if portfolios is None:
 		print("Проверь путь к портфелям")
 		return
 
-	# вернуть get_portfolio, если появится функция удаления user из списка, иначе они просто будут в списке по порядку
+	# вернуть get_portfolio, если появится функция удаления user из списка, иначе
+	# они просто будут в списке по порядку
 	user_portfolio = portfolios[log_user_id-1]
 	# user_portfolio = get_portfolio(log_user_id)
-	# user_portfolio = [port for port in portfolios if port["user_id"] == log_user_id][0]
+	# user_portfolio = [port for port in portfolios if port["user_id"]
+#                                                                   == log_user_id][0]
 
 	if not user_portfolio:
 		print(f"Портфель пользователя с id = {log_user_id} не найден")
@@ -94,11 +100,15 @@ def show_portfolio(base: str | None  = 'USD'):
 		return
 
 	rates = load(RATES_DIR)
-
+	print(f"Портфель пользователя '{log_username}' (база: {base}):")
 	total = 0
 	for currency_code, balance in wallets.items():
+		if currency_code == base:
+			print(f"- {currency_code}: {balance["balance"]} -> {balance["balance"]}")
+			total += balance["balance"]
+			continue
 		balance = balance["balance"]
-		rate_k = rates[f"{currency_code}_{base}"]
+		rate_k = rates[f"{currency_code}_{base}"]["rate"]
 		balance_tr = balance*rate_k
 		total += balance_tr
 		print(f"- {currency_code}: {balance} -> {balance_tr}")
@@ -134,7 +144,7 @@ def buy(currency: str, amount: float):
 		return
 
 	wallets = user_portf["wallets"]
-	if not currency in wallets.keys():
+	if currency not in wallets.keys():
 		wallets[currency] = {"balance": 0.0}
 
 	wallets[currency]["balance"] += amount
@@ -162,7 +172,7 @@ def sell(currency:str, amount:float):
 		print(f"Нет кошелька для '{currency}'")
 		return
 	if user_wallets[currency]["balance"] < amount:
-		print(f"На кошельке недостаточно средств")
+		print("На кошельке недостаточно средств")
 		return
 
 	# в этот момент оно меняется по ссылкам и в списке portfolio_lst!!!
@@ -172,20 +182,25 @@ def sell(currency:str, amount:float):
 
 def get_rate(from_v:str, to:str):
 	if from_v not in VALUTA:
-		print(f"Исходная валюта не существует")
+		print("Исходная валюта не существует")
 
 	if to not in VALUTA:
-		print(f"Итоговая валюта не существует")
+		print("Итоговая валюта не существует")
 
 	rate_dct = load(RATES_DIR)
 
 	last_refresh_str = rate_dct["last_refresh"]
 	last_refresh = datetime.datetime.fromisoformat(last_refresh_str)
 
+	# last_refresh aware (UTC)
+	if last_refresh.tzinfo is None:
+		last_refresh = last_refresh.replace(tzinfo=datetime.UTC)
+
 	current_time = datetime.datetime.now(datetime.UTC)
 
 	if current_time - last_refresh < datetime.timedelta(minutes=5):
-		print(f"Курс {from_v}->{to}: {rate_dct[f"{from_v}_{to}"]}, (обновлен {last_refresh}")
+		print(f"Курс {from_v}->{to}: {rate_dct[f"{from_v}_{to}"]}, "
+														f"(обновлен {last_refresh}")
 	else:
 		print("Нет данных и недоступен Parser ->")
 		print(f"Курс {from_v}->{to} недоступен. Повторите позже")
