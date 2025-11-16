@@ -1,14 +1,15 @@
 import datetime
 import hashlib
+import json
 
 from valutatrade_hub.constants import PORTFOLIOS_DIR, RATES_DIR, USERS_DIR
-import json
+
 
 # TODO: ОКАЗЫВАЕТСЯ, КЛАССЫ ВООБЩЕ НЕ ТРОГАЮТ JSON И НАОБОРОТ!!!
 class User:
 	# todo: убедиться, что User будут передаваться правильные форматы date/password
 	def __init__(self, user_id: int, username: str, hashed_password: str,
-	             salt: str, registration_date: datetime.datetime):
+					salt: str, registration_date: datetime.datetime):
 
 		# валидация username
 		if not isinstance(username, str) or not username.strip():
@@ -119,7 +120,7 @@ class Portfolio:
 			with open(PORTFOLIOS_DIR, "r") as f:
 				portfolios_list = json.load(f)
 				user_portf = [port for port in portfolios_list if port["user_id"]
-				              == self._user_id]
+																	== self._user_id]
 		except FileNotFoundError:
 			print("Файл с данными о портфелях не существует")
 
@@ -154,7 +155,7 @@ class Portfolio:
 			raise FileNotFoundError("Файл portfolios.json не найден")
 
 		portfolio = next((p for p in portfolios if p.get("user_id") == self._user_id),
-		                 None)
+																				None)
 		if not portfolio:
 			raise ValueError(
 				"Портфель для пользователя с id={} не найден".format(self._user_id))
@@ -165,7 +166,7 @@ class Portfolio:
 			raise ValueError("Кошелёк с кодом {} не найден".format(currency_code))
 
 		wallet_obj = Wallet(currency_code=w_data.get("currency_code", currency_code),
-		                    _balance=float(w_data["balance"]))
+													_balance=float(w_data["balance"]))
 		# кэшируем в self._wallets
 		self._wallets[currency_code] = wallet_obj
 		return wallet_obj
@@ -175,7 +176,8 @@ class Portfolio:
 		try:
 			with open(USERS_DIR, "r") as f:
 				users_dict = json.load(f)
-			user_list = [user for user in users_dict if user["user_id"] == self._user_id]
+			user_list = [user for user in users_dict if user["user_id"]
+                                                                    == self._user_id]
 
 		except FileNotFoundError:
 			print("Файл с данными пользователей не найден")
@@ -191,14 +193,6 @@ class Portfolio:
 
 	@property
 	def wallets(self):
-		try:
-			with open(PORTFOLIOS_DIR, "r") as f:
-				portfolios_dict = json.load(f)
-			user_portfolio = [user for user in portfolios_dict
-			                  if user["user_id"] == self._user_id]
-		except FileNotFoundError:
-			print("Файл с данными на пользователя с таким id не найден")
-
 		return self._wallets.copy()
 
 

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-from cli.interface import run
+from valutatrade_hub.cli.interface import run
+
 
 def main():
-	run()
-	print("Кошелек полнится!")
+    run()
+
+if __name__ == "__main__":
+    main()
+
