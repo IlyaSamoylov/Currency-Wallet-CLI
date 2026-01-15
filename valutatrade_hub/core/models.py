@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 import hashlib
-import json
 
 from utils import generate_salt
-from valutatrade_hub.constants import PORTFOLIOS_DIR, RATES_DIR, USERS_DIR
 
 class User:
 	# todo: убедиться, что User будут передаваться правильные форматы date/password
@@ -102,19 +100,25 @@ class User:
 		return u_dict
 
 class Wallet:
-	def __init__(self, currency_code: str, _balance: float):
+	def __init__(self, currency_code: str, balance: float = 0.0):
+
+		if not isinstance(currency_code, str) or not currency_code.strip():
+			raise ValueError("Некорректный код валюты")
+
 		self.currency_code = currency_code
-		self._balance = _balance
+		self.balance = balance # инициируется через сеттер с валидацией
 
 	def deposit(self, amount:float):
 		if not isinstance(amount, (int, float)):
 			raise ValueError("'Количество' денег должно быть числом")
-		if amount < 0:
+		if amount <= 0:
 			raise ValueError("Нельзя положить отрицательное количество денег")
 
 		self._balance += amount
 
-	def withdraw(self, amount:float):
+	def withdraw(self, amount: float):
+		if not isinstance(amount, (int, float)):
+			raise TypeError("Сумма должна быть числом")
 		if amount <= 0:
 			raise ValueError("Сумма снятие не может быть меньше или равна 0")
 		if amount > self.balance:
@@ -123,8 +127,8 @@ class Wallet:
 
 	def get_balance_info(self):
 		return {
-			"Currency code": self.currency_code,
-			"Balance": self._balance
+			"currency code": self.currency_code,
+			"balance": self._balance
 		}
 
 	@property
@@ -133,102 +137,67 @@ class Wallet:
 
 	@balance.setter
 	def balance(self, value: float):
-		if value < 0:
-			raise ValueError("Баланс не может быть меньше 0")
 		if not isinstance(value, (int, float)):
 			raise ValueError("Некорректный тип данных")
+		if value < 0:
+			raise ValueError("Баланс не может быть меньше 0")
 		self._balance = value
 
+	@classmethod
+	def from_dict(cls, w_dict: dict, cur_code: str = 'USD') -> Wallet:
+		return cls(currency_code=cur_code, balance=w_dict.get("balance", 0.0))
+
+	def to_dict(self):
+		return {"balance": self._balance}
+
+
 class Portfolio:
-	def __init__(self, user_id: int, _wallets: dict[str, Wallet]):
-		self._user_id = user_id
-		self._wallets = _wallets
+	# TODO: или вместо user нужен user_id все таки? Дальше глянем
+	def __init__(self, user: User, wallets: dict[str, Wallet] | None = None):
+		self._user = user
+		self._wallets = dict(wallets) if wallets is not None else {}
 
 	def add_currency(self, currency_code: str):
-		if currency_code in self._wallets.keys():
-			raise ValueError("Такой кошелек в портфеле уже есть")
-		self._wallets[currency_code] = Wallet(currency_code, 0)
+		if currency_code in self._wallets:
+			raise ValueError("Кошелек уже существует")
+		self._wallets[currency_code] = Wallet(currency_code, 0.0)
 
-	def get_total_value(self, base_currency: str ='USD'):
-		try:
-			with open(PORTFOLIOS_DIR, "r") as f:
-				portfolios_list = json.load(f)
-				user_portf = [port for port in portfolios_list if port["user_id"]
-																	== self._user_id]
-		except FileNotFoundError:
-			print("Файл с данными о портфелях не существует")
-
-		try:
-			with open(RATES_DIR, "r") as f:
-				rates_dict = json.load(f)
-		except FileNotFoundError:
-			print("Файл с данными о курсах валют не существует")
-
-		if not user_portf:
-			print("Пользователь с таким id не отслеживается")
-			return 0
-
-		total = 0
-
-		for valuta, balance_info in user_portf[0]["wallets"].items():
-			total += balance_info["balance"] * rates_dict[valuta][base_currency]
-
+	def get_total_value(self, exchange_rates: dict, base_currency="USD"):
+		total = 0.0
+		for wallet in self._wallets.values():
+			rate = exchange_rates[wallet.currency_code][base_currency]
+			total += wallet.balance * rate
 		return total
 
-	def get_wallet(self, currency_code):
-		# сначала проверяем в памяти
-		w = self._wallets.get(currency_code)
-		if w:
-			return w
-
-		# попытка подгрузить из файла portfolios.json
+	def get_wallet(self, currency_code: str) -> Wallet:
 		try:
-			with open(PORTFOLIOS_DIR, "r", encoding="utf-8") as f:
-				portfolios = json.load(f)
-		except FileNotFoundError:
-			raise FileNotFoundError("Файл portfolios.json не найден")
-
-		portfolio = next((p for p in portfolios if p.get("user_id") == self._user_id),
-																				None)
-		if not portfolio:
-			raise ValueError(
-				"Портфель для пользователя с id={} не найден".format(self._user_id))
-
-		wallets_dict = portfolio.get("wallets", {})
-		w_data = wallets_dict.get(currency_code)
-		if not w_data:
-			raise ValueError("Кошелёк с кодом {} не найден".format(currency_code))
-
-		wallet_obj = Wallet(currency_code=w_data.get("currency_code", currency_code),
-													_balance=float(w_data["balance"]))
-		# кэшируем в self._wallets
-		self._wallets[currency_code] = wallet_obj
-		return wallet_obj
+			return self._wallets[currency_code]
+		except KeyError:
+			raise ValueError(f"Кошелёк {currency_code} не найден")
 
 	@property
-	def user(self):
-		try:
-			with open(USERS_DIR, "r") as f:
-				users_dict = json.load(f)
-			user_list = [user for user in users_dict if user["user_id"]
-                                                                    == self._user_id]
-
-		except FileNotFoundError:
-			print("Файл с данными пользователей не найден")
-
-		if not user_list:
-			print("Пользователя с таким id нет в базе")
-
-		user_dict = user_list[0]
-		user_info = User(self._user_id, user_dict["username"],
-						user_dict["hashed_password"], user_dict["salt"],
-						user_dict["registration_date"])
-		return user_info
+	def user(self) -> User:
+		return self._user
 
 	@property
-	def wallets(self):
+	def wallets(self) -> dict[str, Wallet]:
 		return self._wallets.copy()
 
+	@classmethod
+	def from_dict(cls, user: User, data: dict) -> Portfolio:
+		wallets = {
+			code: Wallet.from_dict(code, w_data)
+			for code, w_data in data.get("wallets", {}).items()
+		}
+		return cls(user, wallets)
 
+	def to_dict(self) -> dict:
+		return {
+			"user_id": self.user.user_id,
+			"wallets": {
+				code: wallet.to_dict()
+				for code, wallet in self._wallets.items()
+			}
+		}
 
 
