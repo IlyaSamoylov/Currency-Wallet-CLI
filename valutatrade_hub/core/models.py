@@ -1,28 +1,28 @@
-import datetime
+from __future__ import annotations
+
+from datetime import datetime
 import hashlib
 import json
 
+from utils import generate_salt
 from valutatrade_hub.constants import PORTFOLIOS_DIR, RATES_DIR, USERS_DIR
 
-
-# TODO: ОКАЗЫВАЕТСЯ, КЛАССЫ ВООБЩЕ НЕ ТРОГАЮТ JSON И НАОБОРОТ!!!
 class User:
 	# todo: убедиться, что User будут передаваться правильные форматы date/password
-	def __init__(self, user_id: int, username: str, hashed_password: str,
-					salt: str, registration_date: datetime.datetime):
+	def __init__(self, user_id: int, username: str, password: str,
+				registration_date: datetime | None = None):
 
-		# валидация username
-		if not isinstance(username, str) or not username.strip():
-			raise ValueError("Имя не может быть пустым")
-		# минимальная проверка hashed_password (хеш — строка, не пустая)
-		if not isinstance(hashed_password, str) or not hashed_password:
-			raise ValueError("Неверный формат hashed_password")
-
+		# TODO: user_id должен быть уникальным, это будет контролироваться в usecases
 		self._user_id = user_id
-		self._username = username
-		self._hashed_password = hashed_password
-		self._salt = salt
-		self._registration_date = registration_date
+		# _username устанавливается через setter - внутри валидируется:
+		self.username = username
+		self._salt = self._generate_salt()
+		# пароль валидируется в приватном методе, а затем в другом из него делается хэш
+		self._hashed_password = self._hash(self._validate_pword(password))
+		# дата регистрации устанаваливается как передана, если не передана, то устанавливается сейчас
+		self._registration_date = registration_date if registration_date is not None \
+			else datetime.now()
+
 	@property
 	def user_id(self):
 		return self._user_id
@@ -32,10 +32,12 @@ class User:
 		return self._username
 
 	@username.setter
-	def username(self, value: str):
-		if not value:
+	def username(self, uname: str):
+		# валидация username
+		if not isinstance(uname, str) or not uname.strip():
 			raise ValueError("Имя не может быть пустым")
-		self._username = value
+
+		self._username = uname
 
 	@property
 	def hashed_password(self):
@@ -56,16 +58,48 @@ class User:
 			"Registration Date": self.registration_date
 		}
 
+	def _validate_pword(self, pword: str):
+		# валидация введенного пароля
+		if not isinstance(pword, str) or len(pword.strip()) < 4:
+			raise ValueError("Неверный формат password")
+		return pword
+
+	def _generate_salt(self):
+		return generate_salt()
+
 	def change_password(self, new_password: str):
-		if len(new_password) < 4:
-			raise ValueError("Пароль должен содержать хотя бы 4 символа")
-		self._hashed_password = self._hash(new_password)
+		self._salt = self._generate_salt()
+		self._hashed_password = self._hash(self._validate_pword(new_password))
 
 	def verify_password(self, password: str):
 		return self._hash(password) == self._hashed_password
 
 	def _hash(self, password: str) -> str:
 		return hashlib.sha256(password.encode() + self._salt.encode()).hexdigest()
+
+	@classmethod
+	def from_dict(cls, u_dict) -> User:
+		user = cls.__new__(cls)
+
+		user._user_id = u_dict["user_id"]
+		user._username = u_dict["username"]
+		user._hashed_password = u_dict["hashed_password"]
+		user._salt = u_dict["salt"]
+		user._registration_date = datetime.fromisoformat(
+			u_dict["registration_date"]
+		)
+
+		return user
+
+	def to_dict(self):
+		u_dict = {
+			"user_id": self.user_id,
+			"username": self.username,
+			"hashed_password": self.hashed_password,
+			"salt": self.salt,
+			"registration_date": self.registration_date.fromisoformat()
+		}
+		return u_dict
 
 class Wallet:
 	def __init__(self, currency_code: str, _balance: float):
