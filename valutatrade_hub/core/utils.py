@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 import secrets
 
+from valutatrade_hub.core.models import User
 from valutatrade_hub.constants import PORTFOLIOS_DIR, RATES_DIR, SESSION_FILE, USERS_DIR
 
 def generate_salt():
@@ -27,10 +28,10 @@ def save(path: Path, data: Any) -> None:
 	with open(path, "w", encoding="utf-8") as f:
 		json.dump(data, f, ensure_ascii=False, indent=4)
 
-def set_session(user_id: int, username: str):
+def set_session(user: User):
 	SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
 	with open(SESSION_FILE, "w", encoding="utf-8") as f:
-		json.dump({"user_id": user_id, "username": username}, f)
+		json.dump(user.session_info(), f, ensure_ascii=False, indent=4)
 
 def get_session():
 	if not SESSION_FILE.exists():

@@ -4,68 +4,70 @@ import secrets
 
 from valutatrade_hub.constants import PORTFOLIOS_DIR, RATES_DIR, USERS_DIR, VALUTA
 from valutatrade_hub.core.utils import get_session, get_user, load, save, set_session
-
+from valutatrade_hub.core.models import User, Wallet, Portfolio
 class UseCases:
-	def __init__(self):
-		pass
+	def __init__(self, current_user: User | None = None):
+		self._current_user = current_user
+
 
 	# TODO: переписать в вообще все, теперь с классами(
-	def register(username:  str, password: str):
+	def register(self, username:  str, password: str):
+		# password и username валидируются при инициализации экземпляра класса User ниже
 
+		# загрузка пользователей
 		users_lst = load(USERS_DIR)
-
 		# если вернет None, то есть неизвестный путь
 		if users_lst is None:
-			raise ValueError("Проверь путь до user.json")
-		else:
-			if get_user(username) is not None:
-				print(f"Имя пользователя '{username}' уже занято")
-				return
-			if len(password) < 4:
-				print("Пароль должен быть не короче 4 символов")
-				return
+			# TODO: как развести, когда еще не было добавлено ни одного юзера и когда с
+			#  путем к файлу что-то не так?
+			#  вернусь к проблемам, когда буду делать загрузчик сессии
+			raise ValueError("Проверь путь до user.json либо пока нет ни одного юзера")
 
-		user_id = (len(users_lst)) + 1
-		salt = secrets.token_hex(8)
-		hash_pword = hashlib.sha256(password.encode() + salt.encode()).hexdigest()
-		reg_date = datetime.datetime.now(datetime.UTC).isoformat()
-		new_user = {
-			"user_id": user_id,
-			"username": username,
-			"hashed_password": hash_pword,
-			"salt": salt,
-			"registration_date": reg_date
-	        }
-		users_lst.append(new_user)
+		# проверка уникальности username
+		if any(u["username"] == username for u in users_lst):
+			raise ValueError(f"Имя пользователя '{username}' уже занято")
+
+		# генерация данных пользователя
+
+		user_id = max((u["user_id"] for u in users_lst), default=0) + 1
+		new_user = User(user_id, username, password)
+
+		users_lst.append(new_user.to_dict())
 		save(USERS_DIR, users_lst)
 
-		user_portfolio = {
-			"user_id": user_id,
-			"wallets": {}
-	        }
-
+		new_portfolio = Portfolio(new_user)
 		portfolios_lst = load(PORTFOLIOS_DIR)
-		portfolios_lst.append(user_portfolio)
+		if portfolios_lst is None:
+			portfolios_lst = []
+
+		portfolios_lst.append(new_portfolio.to_dict())
 		save(PORTFOLIOS_DIR, portfolios_lst)
+
+		# TODO: наверное лучше будет вернуть консоли сообщение для вывода на экран
 		print(f"Пользователь '{username}' зарегистрирован (id={user_id}). "
 	            f"Войдите: login --username {username} --password", len(password)*"*")
 
-	def login(username: str, password: str):
-		user = get_user(username)
+	def login(self, username: str, password: str):
 
-		if user is None:
-			print(f"Пользователь '{username}' не найден")
-			return
+		users_lst = load(USERS_DIR)
+		if users_lst is None:
+			raise ValueError(f"Сначала необходимо зарегистрироваться")
 
-		salt = user["salt"]
-		hash_right_pword = user["hashed_password"]
+		# TODO: в будущем напишу dbmanager, который возьмет на себя ответственность
+		#  за поиск в базе нужных юзеров и их портфелей, а пока ручками
+		user_dict = next((u for u in users_lst if u["username"] == username), None)
+		if user_dict is None:
+			raise ValueError(f"Пользователь '{username}' не найден")
 
-		hash_input_pword = hashlib.sha256(password.encode() + salt.encode()).hexdigest()
-		if hash_right_pword != hash_input_pword:
-			print("Неверный пароль")
-			return
-		print(f"Вы вошли как '{username}' ")
-		set_session(user["user_id"],username)
+		user = User.from_dict(user_dict)
+
+		if not user.verify_password(password):
+			raise ValueError("Неверный пароль")
+
+		self._current_user = user
+		set_session(user)
+
+		print(f"Вы вошли как '{username}'")
 
 
 	def show_portfolio(base: str | None  = 'USD'):

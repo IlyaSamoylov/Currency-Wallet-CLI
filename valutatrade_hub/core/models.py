@@ -95,9 +95,17 @@ class User:
 			"username": self.username,
 			"hashed_password": self.hashed_password,
 			"salt": self.salt,
-			"registration_date": self.registration_date.fromisoformat()
+			"registration_date": self.registration_date.isoformat()
 		}
 		return u_dict
+
+	def session_info(self) -> dict:
+		"""Метод для передачи краткой публичной информации о пользователе.
+		Например, для установки сессии"""
+		return {
+			"user_id": self._user_id,
+			"username": self._username
+		}
 
 class Wallet:
 	def __init__(self, currency_code: str, balance: float = 0.0):

@@ -64,10 +64,10 @@ class ValutatradeCLI:
 		print("Добро пожаловать")
 		self.print_help()
 		while self._running:
-
-			command, params = self._parse_cmd()
-
 			try:
+				command, params = self._parse_cmd()
+
+
 				match command:
 					case "register":
 						self._require_params(params, ["username", "password"])
@@ -116,12 +116,12 @@ class ValutatradeCLI:
 			# 	print("Проверьте правильность и количество параметров. Можете обратиться к"
 			# 	      " справке, вызвав help для полной справки или help --command <command>
 			# 	      " для справки по отдельной команде")
-
+			except ValueError as e:
+				print(e)
 			except IndexError:
 				print("Вводите сначала имя переменной с \"--\", потом значение")
-
-			# except Exception as e:
-			# 	print(f"ошибка {e}")
+			except Exception as e:
+				print(f"Неожиданная ошибка: \n{e}")
 
 # TODO: сделать что-то с raise ошибок, просто обернуть все в try...except не кажется правильным,
 #  как вариант: написать пользовательские ошибки и вставить их, потому что иначе ValueError
