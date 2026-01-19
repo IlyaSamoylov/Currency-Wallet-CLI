@@ -1,5 +1,5 @@
 import datetime
-
+from pathlib import Path
 
 from valutatrade_hub.constants import PORTFOLIOS_DIR, RATES_DIR, USERS_DIR
 from valutatrade_hub.core.utils import load, save, set_session
@@ -8,7 +8,8 @@ from valutatrade_hub.core.models import User, Wallet, Portfolio
 
 # TODO: здесь, пока не напишем доступ к курсам через API или что там
 class RatesService:
-	CACHE_TTL = datetime.timedelta(minutes=5)
+	# CACHE_TTL = datetime.timedelta(minutes=5)
+	CACHE_TTL = datetime.timedelta(days=21)
 
 	@staticmethod
 	def get_rate(from_: str, to: str) -> float:
@@ -33,8 +34,10 @@ class RatesService:
 	def _load_rates(self) -> dict:
 		return load(RATES_DIR)
 
-	def is_cache_fresh(self, rates: dict) -> bool:
-		last_refresh_str = rates.get("last_refresh")
+	def is_cache_fresh(self, rate: dict) -> bool:
+
+		last_refresh_str = rate.get("updated_at")
+
 		if not last_refresh_str:
 			return False
 
@@ -56,22 +59,29 @@ class RatesService:
 		self.validate_currency(code=from_)
 		self.validate_currency(code=to)
 
-		rates = self._load_rates()
-
-		if not self.is_cache_fresh(rates):
-			raise RuntimeError("Курс недоступен: кеш устарел и Parser недоступен")
-
 		key = f"{from_}_{to}"
 		reverse_key = f"{to}_{from_}"
 
-		if key not in rates or reverse_key not in rates:
+		rates = self._load_rates()
+
+		# хотя бы один - прямой/обратный курс в rates есть
+		if key not in rates and reverse_key not in rates:
 			raise RuntimeError(f"Курс {from_}->{to} недоступен")
 
-		updated_at = datetime.datetime.fromisoformat(rates["last_refresh"])
+		# rate из двух, который есть в rates:
+		ex_rate = rates.get(key) or rates.get(reverse_key)
+
+		if not self.is_cache_fresh(ex_rate):
+			raise RuntimeError("Курс недоступен: кеш устарел и Parser недоступен")
+
+		# либо курс есть в rate и его берем, либо нет, тогда считаем по второму
+		req_rate = rates.get(key).get("rate") if rates.get(key) else 1 / rates[reverse_key]["rate"]
+		reverse_rate = rates.get(reverse_key).get("rate") if rates.get(reverse_key) else 1 / rates[key]["rate"]
+		updated_at = datetime.datetime.fromisoformat(ex_rate["updated_at"])
 
 		return {
-			"rate": rates[key]["rate"],
-			"reverse_rate": rates[reverse_key]["rate"],
+			"rate": req_rate,
+			"reverse_rate": reverse_rate,
 			"updated_at": updated_at,
 		}
 
@@ -84,12 +94,19 @@ class UseCases:
 		self._current_user = current_user
 		self._current_portfolio = current_portfolio
 
-	# TODO: переписать в вообще все, теперь с классами(
+	@staticmethod
+	def _load(path: Path):
+		return load(path)
+
+	@staticmethod
+	def _save(path: Path, data):
+		return save(path, data)
+
 	def register(self, username:  str, password: str):
 		# password и username валидируются при инициализации экземпляра класса User ниже
 
 		# загрузка пользователей
-		users_lst = load(USERS_DIR)
+		users_lst = self._load(USERS_DIR)
 		# если вернет None, то есть неизвестный путь
 		if users_lst is None:
 			# TODO: как развести, когда еще не было добавлено ни одного юзера и когда с
@@ -107,15 +124,16 @@ class UseCases:
 		new_user = User(user_id, username, password)
 
 		users_lst.append(new_user.to_dict())
-		save(USERS_DIR, users_lst)
+		self._save(USERS_DIR, users_lst)
 
 		new_portfolio = Portfolio(new_user)
-		portfolios_lst = load(PORTFOLIOS_DIR)
+		new_portfolio.add_currency("USD", init_balance=100.00)
+		portfolios_lst = self._load(PORTFOLIOS_DIR)
 		if portfolios_lst is None:
 			portfolios_lst = []
 
 		portfolios_lst.append(new_portfolio.to_dict())
-		save(PORTFOLIOS_DIR, portfolios_lst)
+		self._save(PORTFOLIOS_DIR, portfolios_lst)
 
 		# TODO: наверное лучше будет вернуть консоли сообщение для вывода на экран
 		print(f"Пользователь '{username}' зарегистрирован (id={user_id}). "
@@ -123,7 +141,7 @@ class UseCases:
 
 	def login(self, username: str, password: str):
 
-		users_lst = load(USERS_DIR)
+		users_lst = self._load(USERS_DIR)
 		if users_lst is None:
 			raise ValueError(f"Сначала необходимо зарегистрироваться")
 
@@ -145,9 +163,8 @@ class UseCases:
 		print(f"Вы вошли как '{username}'")
 
 	# TODO: уберем, когда придем к абстракции над БД
-	@staticmethod
-	def _load_portfolio(user: User) -> Portfolio:
-		raw_portfolios = load(PORTFOLIOS_DIR)
+	def _load_portfolio(self, user: User) -> Portfolio:
+		raw_portfolios = self._load(PORTFOLIOS_DIR)
 
 		for item in raw_portfolios:
 			if item["user_id"] == user.user_id:
@@ -177,6 +194,9 @@ class UseCases:
 		if not self._current_user:
 			raise ValueError("Сначала нужно зарегистрироваться")
 
+		if currency == "USD":
+			raise ValueError("USD - базовая валюта, ее нельзя купить, только пополнить")
+
 		# amount уже валидируется в CLI
 		if amount <= 0:
 			raise ValueError("'amount' должен быть положительным числом")
@@ -188,15 +208,23 @@ class UseCases:
 		if not portfolio:
 			raise RuntimeError("Портфель пользователя не загружен")
 
+		# курс currency → USD
+		rate = self._rates_service.get_rate(currency, "USD")
+		cost_usd = amount * rate
+
+		# USD-кошелёк ОБЯЗАТЕЛЕН
+		if not portfolio.has_wallet("USD"):
+			raise ValueError("Недостаточно средств: USD-кошелёк отсутствует")
+
+		usd_wallet = portfolio.get_wallet("USD")
+
 		wallet = portfolio.get_or_create_wallet(currency)
 
 		before = wallet.balance
+
+		usd_wallet.withdraw(cost_usd)
 		wallet.deposit(amount)
 		after = wallet.balance
-
-		# расчетная стоимость
-		rate = self._rates_service.get_rate(currency, "USD")
-		cost = amount * rate
 
 		self._save_portfolio(portfolio)
 
@@ -205,13 +233,15 @@ class UseCases:
 			"before": before,
 			"after": after,
 			"rate": rate,
-			"cost": cost,
+			"cost": cost_usd,
 		}
 
 	def sell(self, currency:str, amount:float):
 		if not self._current_user:
 			raise ValueError("Сначала нужно зарегистрироваться")
 
+		if currency == "USD":
+			raise ValueError("USD - базовая валюта, ее нельзя продать, только пополнить")
 		if amount <= 0:
 			raise ValueError("'amount' должен быть положительным числом")
 
@@ -226,7 +256,8 @@ class UseCases:
 			raise ValueError(f"У вас нет кошелька {currency}. Добавьте валюту: "
 			                 f"она создаётся автоматически при первой покупке.")
 
-		wallet = portfolio.get_wallet(currency)
+		wallet = portfolio.get_or_create_wallet(currency)
+		usd_wallet = portfolio.get_wallet("USD")
 
 		before = wallet.balance
 		wallet.withdraw(amount)
@@ -235,6 +266,7 @@ class UseCases:
 		# расчетная стоимость
 		rate = self._rates_service.get_rate(currency, "USD")
 		cost = amount * rate
+		usd_wallet.deposit(cost)
 
 		self._save_portfolio(portfolio)
 
@@ -248,21 +280,46 @@ class UseCases:
 
 	def get_rate(self, from_v:str, to:str):
 
-		if not self._current_user:
-			raise ValueError("Сначала выполните login")
+		# if not self._current_user:
+		# 	raise ValueError("Сначала выполните login")
 
 		return self._rates_service.get_rate_pair(from_v, to)
 
+	def deposit(self, amount):
+		if not self._current_user:
+			raise ValueError("Сначала нужно зарегистрироваться")
+
+		portfolio = self._current_portfolio
+		if not portfolio:
+			raise RuntimeError("Портфель пользователя не загружен")
+
+
+		usd_wallet = portfolio.get_or_create_wallet("USD")
+
+		before = usd_wallet.balance
+		usd_wallet.deposit(amount)
+		after = usd_wallet.balance
+
+		self._save_portfolio(portfolio)
+
+		return {
+			"currency": "USD",
+			"before": before,
+			"after": after,
+			"amount": amount,
+		}
+
 	def _save_portfolio(self, portfolio: Portfolio):
-		portfolios = load(PORTFOLIOS_DIR)
+			portfolios = self._load(PORTFOLIOS_DIR)
 
-		data = portfolio.to_dict()
+			data = portfolio.to_dict()
 
-		for i, p in enumerate(portfolios):
-			if p["user_id"] == portfolio.user.user_id:
-				portfolios[i] = data
-				break
-		else:
-			portfolios.append(data)
+			for i, p in enumerate(portfolios):
+				if p["user_id"] == portfolio.user.user_id:
+					portfolios[i] = data
+					break
+			else:
+				portfolios.append(data)
 
-		save(PORTFOLIOS_DIR, portfolios)
+			self._save(PORTFOLIOS_DIR, portfolios)
+

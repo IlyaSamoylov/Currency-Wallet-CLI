@@ -14,6 +14,7 @@ class ValutatradeCLI:
 			"sell": "sell --currency <currency> --amount <amount>",
 			"show-portfolio": "show-portfolio [--base <base> = USD]",
 			"get-rate": "get-rate --from <from currency> --to <to currency>",
+			"deposit": "deposit --amount",
 			"справка": "help [--command <command>]",
 			"Закончить работу": "exit"
 		}
@@ -73,6 +74,8 @@ class ValutatradeCLI:
 						u_name = params.get('username')
 						pword = params.get('password')
 						self._usecases.register(username=u_name, password=pword)
+						print("В подарок за регистрацию вы получаете стартовый баланс 100 USD.",
+						      "Для пополнения баланса в базовой валюте (USD) можете использовать команду deposit")
 
 					case "login":
 						self._require_params(params, ["username", "password"])
@@ -129,7 +132,18 @@ class ValutatradeCLI:
 
 						print(f"Курс {from_v}→{to}: {result['rate']:.8f} "
 							f"(обновлено: {updated})")
-						print(f"Обратный курс {to}→{from_v}: {result['reverse_rate']:.2f}")
+						print(f"Обратный курс {to}→{from_v}: {result['reverse_rate']:.8f}")
+
+					case "deposit":
+						self._require_params(params, ["amount"])
+						amount = self._validate_amount(params)
+						result = self._usecases.deposit(amount)
+
+						print(
+							f"Баланс пополнен на {result['amount']:.2f} USD\n"
+							f"Было: {result['before']:.2f} USD\n"
+							f"Стало: {result['after']:.2f} USD"
+						)
 
 					case "help":
 						self.print_help(params.get("command"))
@@ -149,8 +163,8 @@ class ValutatradeCLI:
 				print(e)
 			except IndexError:
 				print("Вводите сначала имя переменной с \"--\", потом значение")
-			except Exception as e:
-				print(f"Неожиданная ошибка: \n{e}")
+			# except Exception as e:
+			# 	print(f"Неожиданная ошибка: \n{e}")
 
 # TODO: сделать что-то с raise ошибок, просто обернуть все в try...except не кажется правильным,
 #  как вариант: написать пользовательские ошибки и вставить их, потому что иначе ValueError

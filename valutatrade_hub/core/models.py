@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 import hashlib
-
 import secrets
+
 class User:
 	# todo: убедиться, что User будут передаваться правильные форматы date/password
 	def __init__(self, user_id: int, username: str, password: str,
@@ -166,10 +166,10 @@ class Portfolio:
 		self._user = user
 		self._wallets = wallets if wallets is not None else {}
 
-	def add_currency(self, currency_code: str):
+	def add_currency(self, currency_code: str, init_balance: float = 0.0):
 		if self.has_wallet(currency_code):
 			raise ValueError(f"Кошелёк {currency_code} уже существует")
-		wallet = Wallet(currency_code, 0.0)
+		wallet = Wallet(currency_code, init_balance)
 		self._wallets[currency_code] = wallet
 		return wallet
 
