@@ -4,23 +4,49 @@ from pathlib import Path
 from valutatrade_hub.constants import PORTFOLIOS_DIR, RATES_DIR, USERS_DIR
 from valutatrade_hub.core.utils import load, save, set_session
 from valutatrade_hub.core.models import User, Wallet, Portfolio
-
+from exceptions import CurrencyNotFoundError, InsufficientFundsError, ApiRequestError, WalletNotFoundError
+# че, все методы RatesService в try..except c ApiRequestError оборачивать? Или заменить все локальные
+# load(RATES_DIR) на метод _load_rates и засунуть в него ApiRequestError? Если решим определить rates_dict
+# как атрибут класса RatesService, то даже не знаю, куда девать ApiRequestError
 
 # TODO: здесь, пока не напишем доступ к курсам через API или что там
 class RatesService:
 	# CACHE_TTL = datetime.timedelta(minutes=5)
 	CACHE_TTL = datetime.timedelta(days=21)
 
-	@staticmethod
-	def get_rate(from_: str, to: str) -> float:
-		rates = load(RATES_DIR)
-		if from_ != to and f"{from_}_{to}" not in rates:
-			raise ValueError(f"Неизвестная валюта конвертации: {to}")
-		return 1.0 if from_ == to else rates[f"{from_}_{to}"]["rate"]
 
-	@staticmethod
-	def validate_currency(code: str):
-		rates = load(RATES_DIR)
+	def get_rate(self, from_: str, to: str) -> float:
+
+		if not isinstance(from_, str) or not isinstance(to, str):
+			raise TypeError("Коды валют должны быть строками")
+
+		if from_ == to:
+			return 1.0
+
+		self.validate_currency(code=from_)
+		self.validate_currency(code=to)
+
+		rates = self._load_rates()
+
+		key = f"{from_}_{to}"
+		reverse_key = f"{to}_{from_}"
+
+		# если валюта есть, но курс недоступен
+		if key not in rates and reverse_key not in rates:
+			raise RuntimeError(f"Курс {from_}->{to} недоступен")
+
+		rate_entry = rates.get(key) or rates.get(reverse_key)
+
+		if not self.is_cache_fresh(rate_entry):
+			raise RuntimeError("Курс недоступен: кеш устарел")
+
+		if key in rates:
+			return rates[key]["rate"]
+
+		return 1 / rates[reverse_key]["rate"]
+
+	def validate_currency(self, code: str):
+		rates = self._load_rates()
 		known = set()
 
 		for pair in rates:
@@ -29,10 +55,13 @@ class RatesService:
 				known.update([a, b])
 
 		if code not in known:
-			raise ValueError(f"Неизвестная валюта '{code}'")
+			raise CurrencyNotFoundError(code)
 
 	def _load_rates(self) -> dict:
-		return load(RATES_DIR)
+		try:
+			return load(RATES_DIR)
+		except Exception as e:
+			raise ApiRequestError(str(e))
 
 	def is_cache_fresh(self, rate: dict) -> bool:
 
@@ -212,11 +241,7 @@ class UseCases:
 		rate = self._rates_service.get_rate(currency, "USD")
 		cost_usd = amount * rate
 
-		# USD-кошелёк ОБЯЗАТЕЛЕН
-		if not portfolio.has_wallet("USD"):
-			raise ValueError("Недостаточно средств: USD-кошелёк отсутствует")
-
-		usd_wallet = portfolio.get_wallet("USD")
+		usd_wallet = portfolio.get_or_create_wallet("USD")
 
 		wallet = portfolio.get_or_create_wallet(currency)
 
@@ -253,10 +278,9 @@ class UseCases:
 			raise RuntimeError("Портфель пользователя не загружен")
 
 		if not portfolio.has_wallet(currency):
-			raise ValueError(f"У вас нет кошелька {currency}. Добавьте валюту: "
-			                 f"она создаётся автоматически при первой покупке.")
+			raise WalletNotFoundError(currency)
 
-		wallet = portfolio.get_or_create_wallet(currency)
+		wallet = portfolio.get_wallet(currency)
 		usd_wallet = portfolio.get_wallet("USD")
 
 		before = wallet.balance

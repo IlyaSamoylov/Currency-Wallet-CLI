@@ -4,6 +4,8 @@ from datetime import datetime
 import hashlib
 import secrets
 
+from exceptions import InsufficientFundsError
+
 class User:
 	# todo: убедиться, что User будут передаваться правильные форматы date/password
 	def __init__(self, user_id: int, username: str, password: str,
@@ -131,7 +133,8 @@ class Wallet:
 		if amount <= 0:
 			raise ValueError("Сумма снятие не может быть меньше или равна 0")
 		if amount > self.balance:
-			raise ValueError("Сумма снятия не может превышать баланс")
+			# поменял исключение, правильно?
+			raise InsufficientFundsError(self.balance, self.currency_code ,amount)
 		self._balance -= amount
 
 	def get_balance_info(self):

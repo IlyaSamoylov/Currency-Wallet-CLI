@@ -1,3 +1,4 @@
+from valutatrade_hub.core.exceptions import ValutaTradeError
 from valutatrade_hub.core.usecases import UseCases
 from valutatrade_hub.core.utils import init_data_files
 
@@ -159,6 +160,8 @@ class ValutatradeCLI:
 			# 	print("Проверьте правильность и количество параметров. Можете обратиться к"
 			# 	      " справке, вызвав help для полной справки или help --command <command>
 			# 	      " для справки по отдельной команде")
+			except ValutaTradeError as e:
+				print(e)
 			except ValueError as e:
 				print(e)
 			except IndexError:
