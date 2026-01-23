@@ -1,206 +1,370 @@
 import datetime
-import hashlib
-import secrets
+from pathlib import Path
 
-from valutatrade_hub.constants import PORTFOLIOS_DIR, RATES_DIR, USERS_DIR, VALUTA
-from valutatrade_hub.core.utils import get_session, get_user, load, save, set_session
+from valutatrade_hub.core.utils import load, save, set_session
+from valutatrade_hub.core.models import User, Wallet, Portfolio
+from valutatrade_hub.infra.settings import SettingsLoader
+from valutatrade_hub.core.exceptions import CurrencyNotFoundError, InsufficientFundsError, ApiRequestError, WalletNotFoundError
+# че, все методы RatesService в try..except c ApiRequestError оборачивать? Или заменить все локальные
+# load(RATES_DIR) на метод _load_rates и засунуть в него ApiRequestError? Если решим определить rates_dict
+# как атрибут класса RatesService, то даже не знаю, куда девать ApiRequestError
+from valutatrade_hub.decorators import log_action
+
+# TODO: здесь, пока не напишем доступ к курсам через API или что там
+class RatesService:
+
+	def __init__(self):
+		self._settings = SettingsLoader()
+		self._rate_dir = Path(self._settings.get("data_dir")) / "rates.json"
+		self.cache_ttl = datetime.timedelta(seconds=self._settings.get("rates_ttl_seconds"))
+
+	def get_rate(self, from_: str, to: str) -> float:
+
+		if not isinstance(from_, str) or not isinstance(to, str):
+			raise TypeError("Коды валют должны быть строками")
+
+		if from_ == to:
+			return 1.0
+
+		self.validate_currency(code=from_)
+		self.validate_currency(code=to)
+
+		rates = self._load_rates()
+
+		key = f"{from_}_{to}"
+		reverse_key = f"{to}_{from_}"
+
+		# если валюта есть, но курс недоступен
+		if key not in rates and reverse_key not in rates:
+			raise RuntimeError(f"Курс {from_}->{to} недоступен")
+
+		rate_entry = rates.get(key) or rates.get(reverse_key)
+
+		if not self.is_cache_fresh(rate_entry):
+			raise RuntimeError("Курс недоступен: кеш устарел")
+
+		if key in rates:
+			return rates[key]["rate"]
+
+		return 1 / rates[reverse_key]["rate"]
+
+	def validate_currency(self, code: str):
+		rates = self._load_rates()
+		known = set()
+
+		for pair in rates:
+			if "_" in pair:
+				a, b = pair.split("_")
+				known.update([a, b])
+
+		if code not in known:
+			raise CurrencyNotFoundError(code)
+
+	def _load_rates(self) -> dict:
+		try:
+			return load(self._rate_dir)
+		except Exception as e:
+			raise ApiRequestError(str(e))
+
+	def is_cache_fresh(self, rate: dict) -> bool:
+
+		last_refresh_str = rate.get("updated_at")
+
+		if not last_refresh_str:
+			return False
+
+		last_refresh = datetime.datetime.fromisoformat(last_refresh_str)
+		if last_refresh.tzinfo is None:
+			last_refresh = last_refresh.replace(tzinfo=datetime.UTC)
+
+		return datetime.datetime.now(datetime.UTC) - last_refresh < self.cache_ttl
+
+	def get_rate_pair(self, from_: str, to: str) -> dict:
+		"""
+		Возвращает:
+		{
+			"rate": float,
+			"reverse_rate": float,
+			"updated_at": datetime
+		}
+		"""
+		self.validate_currency(code=from_)
+		self.validate_currency(code=to)
+
+		key = f"{from_}_{to}"
+		reverse_key = f"{to}_{from_}"
+
+		rates = self._load_rates()
+
+		# хотя бы один - прямой/обратный курс в rates есть
+		if key not in rates and reverse_key not in rates:
+			raise RuntimeError(f"Курс {from_}->{to} недоступен")
+
+		# rate из двух, который есть в rates:
+		ex_rate = rates.get(key) or rates.get(reverse_key)
+
+		if not self.is_cache_fresh(ex_rate):
+			raise RuntimeError("Курс недоступен: кеш устарел и Parser недоступен")
+
+		# либо курс есть в rate и его берем, либо нет, тогда считаем по второму
+		req_rate = rates.get(key).get("rate") if rates.get(key) else 1 / rates[reverse_key]["rate"]
+		reverse_rate = rates.get(reverse_key).get("rate") if rates.get(reverse_key) else 1 / rates[key]["rate"]
+		updated_at = datetime.datetime.fromisoformat(ex_rate["updated_at"])
+
+		return {
+			"rate": req_rate,
+			"reverse_rate": reverse_rate,
+			"updated_at": updated_at,
+		}
 
 
-# TODO: переписать в вообще все, теперь с классами(
-def register(username:  str, password: str):
 
-	users_lst = load(USERS_DIR)
+class UseCases:
+	def __init__(self, rates_service: RatesService, current_user: User | None = None,
+	             current_portfolio: Portfolio | None = None):
+		self._rates_service = rates_service
+		self._current_user = current_user
+		self._current_portfolio = current_portfolio
 
-	# если вернет None, то есть неизвестный путь
-	if users_lst is None:
-		raise ValueError("Проверь путь до user.json")
-	else:
-		if get_user(username) is not None:
-			print(f"Имя пользователя '{username}' уже занято")
-			return
-		if len(password) < 4:
-			print("Пароль должен быть не короче 4 символов")
-			return
+		self._settings = SettingsLoader()
+		self._base_currency = self._settings.get("default_base_currency")
+		self._portfolio_dir = Path(self._settings.get("data_dir")) / "portfolios.json"
+		self._users_dir = Path(self._settings.get("data_dir")) / "users.json"
 
-	user_id = (len(users_lst)) + 1
-	salt = secrets.token_hex(8)
-	hash_pword = hashlib.sha256(password.encode() + salt.encode()).hexdigest()
-	reg_date = datetime.datetime.now(datetime.UTC).isoformat()
-	new_user = {
-		"user_id": user_id,
-		"username": username,
-		"hashed_password": hash_pword,
-		"salt": salt,
-		"registration_date": reg_date
-        }
-	users_lst.append(new_user)
-	save(USERS_DIR, users_lst)
+	@staticmethod
+	def _load(path: Path):
+		return load(path)
 
-	user_portfolio = {
-		"user_id": user_id,
-		"wallets": {}
-        }
+	@staticmethod
+	def _save(path: Path, data):
+		return save(path, data)
 
-	portfolios_lst = load(PORTFOLIOS_DIR)
-	portfolios_lst.append(user_portfolio)
-	save(PORTFOLIOS_DIR, portfolios_lst)
-	print(f"Пользователь '{username}' зарегистрирован (id={user_id}). "
-            f"Войдите: login --username {username} --password", len(password)*"*")
+	@log_action("REGISTER")
+	def register(self, username:  str, password: str):
+		# password и username валидируются при инициализации экземпляра класса User ниже
 
-def login(username: str, password: str):
-	user = get_user(username)
+		# загрузка пользователей
+		users_lst = self._load(self._users_dir)
+		# если вернет None, то есть неизвестный путь
+		if users_lst is None:
+			# TODO: как развести, когда еще не было добавлено ни одного юзера и когда с
+			#  путем к файлу что-то не так?
+			#  вернусь к проблемам, когда буду делать загрузчик сессии
+			raise ValueError("Проверь путь до user.json либо пока нет ни одного юзера")
 
-	if user is None:
-		print(f"Пользователь '{username}' не найден")
-		return
+		# проверка уникальности username
+		if any(u["username"] == username for u in users_lst):
+			raise ValueError(f"Имя пользователя '{username}' уже занято")
 
-	salt = user["salt"]
-	hash_right_pword = user["hashed_password"]
+		# генерация данных пользователя
 
-	hash_input_pword = hashlib.sha256(password.encode() + salt.encode()).hexdigest()
-	if hash_right_pword != hash_input_pword:
-		print("Неверный пароль")
-		return
-	print(f"Вы вошли как '{username}' ")
-	set_session(user["user_id"],username)
+		user_id = max((u["user_id"] for u in users_lst), default=0) + 1
+		new_user = User(user_id, username, password)
 
+		users_lst.append(new_user.to_dict())
+		self._save(self._users_dir, users_lst)
 
-def show_portfolio(base: str | None  = 'USD'):
-	if base not in VALUTA:
-		print(f"Неизвестная базовая валюта '{base}'")
-		return
+		new_portfolio = Portfolio(new_user)
+		new_portfolio.add_currency(self._base_currency, init_balance=100.00)
+		portfolios_lst = self._load(self._portfolio_dir)
+		if portfolios_lst is None:
+			portfolios_lst = []
 
-	session = get_session()
-	if not session:
-		print("Сначала выполните login")
-		return
+		portfolios_lst.append(new_portfolio.to_dict())
+		self._save(self._portfolio_dir, portfolios_lst)
 
-	log_user_id = session["user_id"]
-	log_username = session["username"]
+		# TODO: наверное лучше будет вернуть консоли сообщение для вывода на экран
+		print(f"Пользователь '{username}' зарегистрирован (id={user_id}). "
+				f"Войдите: login --username {username} --password", len(password)*"*")
 
-	portfolios = load(PORTFOLIOS_DIR)
-	if portfolios is None:
-		print("Проверь путь к портфелям")
-		return
+	@log_action("LOGIN")
+	def login(self, username: str, password: str):
 
-	# вернуть get_portfolio, если появится функция удаления user из списка, иначе
-	# они просто будут в списке по порядку
-	user_portfolio = portfolios[log_user_id-1]
-	# user_portfolio = get_portfolio(log_user_id)
-	# user_portfolio = [port for port in portfolios if port["user_id"]
-#                                                                   == log_user_id][0]
+		users_lst = self._load(self._users_dir)
+		if users_lst is None:
+			raise ValueError(f"Сначала необходимо зарегистрироваться")
 
-	if not user_portfolio:
-		print(f"Портфель пользователя с id = {log_user_id} не найден")
-		return
+		# TODO: в будущем напишу dbmanager, который возьмет на себя ответственность
+		#  за поиск в базе нужных юзеров и их портфелей, а пока ручками
+		user_dict = next((u for u in users_lst if u["username"] == username), None)
+		if user_dict is None:
+			raise ValueError(f"Пользователь '{username}' не найден")
 
-	wallets = user_portfolio["wallets"]
-	if not wallets:
-		print("Портфель пуст")
-		return
+		user = User.from_dict(user_dict)
 
-	rates = load(RATES_DIR)
-	print(f"Портфель пользователя '{log_username}' (база: {base}):")
-	total = 0
-	for currency_code, balance in wallets.items():
-		if currency_code == base:
-			print(f"- {currency_code}: {balance["balance"]} -> {balance["balance"]}")
-			total += balance["balance"]
-			continue
-		balance = balance["balance"]
-		rate_k = rates[f"{currency_code}_{base}"]["rate"]
-		balance_tr = balance*rate_k
-		total += balance_tr
-		print(f"- {currency_code}: {balance} -> {balance_tr}")
+		if not user.verify_password(password):
+			raise ValueError("Неверный пароль")
 
-	print(10*'-')
-	print(f"ИТОГО: {total} {base}")
+		self._current_user = user
+		self._current_portfolio = self._load_portfolio(user)
+		set_session(user)
 
-def buy(currency: str, amount: float):
+		print(f"Вы вошли как '{username}'")
 
-	session = get_session()
-	if not session:
-		print("Сначала выполните login")
-		return
+	# TODO: уберем, когда придем к абстракции над БД
+	def _load_portfolio(self, user: User) -> Portfolio:
+		raw_portfolios = self._load(self._portfolio_dir)
 
-	log_id = session["user_id"]
-	log_uname = session["username"]
+		for item in raw_portfolios:
+			if item["user_id"] == user.user_id:
+				wallets = {
+					code: Wallet(currency_code=code,
+								 balance=data["balance"])
+					for code, data in item["wallets"].items()
+				}
+				return Portfolio(user=user, wallets=wallets)
 
-	if currency not in VALUTA:
-		print(f"Неизвестная валюта '{currency}'")
-		return
-	if amount <= 0:
-		print("Количество валюты должен быть положительным числом")
-		return
-	# Если нет такого кошелька - создать
-	portfolios_lst = load(PORTFOLIOS_DIR)
+		# если портфель не найден — возвращаем пустой
+		return Portfolio(user=user, wallets={})
 
-	# ! вернуть, если будут удаляться user
-	user_portf = portfolios_lst[log_id-1]
-	# user_portf = get_portfolio(log_id)
+	def show_portfolio(self, base: str | None  = None):
+		if base is None:
+			base = self._base_currency
+		# TODO: где будет проверяться base? - наверное, где-то в Currency
+		if not self._current_user:
+			raise ValueError("Сначала выполните login")
 
-	if user_portf is None:
-		print(f"Нет портфеля для пользователя '{log_uname}'")
-		return
+		if not self._current_portfolio.wallets:
+			raise ValueError(f"Портфель пуст")
 
-	wallets = user_portf["wallets"]
-	if currency not in wallets.keys():
-		wallets[currency] = {"balance": 0.0}
+		self._rates_service.validate_currency(base)
 
-	wallets[currency]["balance"] += amount
+		return self._current_portfolio.view(base, self._rates_service)
 
-	save(PORTFOLIOS_DIR, portfolios_lst)
+	@log_action("BUY", verbose=True)
+	def buy(self, currency: str, amount: float):
 
-def sell(currency:str, amount:float):
-	session = get_session()
-	if not session:
-		print("Сначала выполните login")
-		return
-	if currency not in VALUTA:
-		print(f"Неизвестный код валюты '{currency}'")
-		return
-	if amount <= 0:
-		print("Количество продаваемой валюты должно быть больше 0")
-		return
+		if not self._current_user:
+			raise ValueError("Сначала нужно зарегистрироваться")
 
-	portfolios_lst = load(PORTFOLIOS_DIR)
-	# ! вернуть, если можно удалять пользователей
-	user_portf = portfolios_lst[session["user_id"]-1]
+		if currency == self._base_currency:
+			raise ValueError(f"{currency} - базовая валюта, ее нельзя купить, только пополнить")
 
-	user_wallets = user_portf["wallets"]
-	if currency not in user_wallets.keys():
-		print(f"Нет кошелька для '{currency}'")
-		return
-	if user_wallets[currency]["balance"] < amount:
-		print("На кошельке недостаточно средств")
-		return
+		# amount уже валидируется в CLI
+		if amount <= 0:
+			raise ValueError("'amount' должен быть положительным числом")
 
-	# в этот момент оно меняется по ссылкам и в списке portfolio_lst!!!
-	user_wallets[currency]["balance"] -= amount
+		# валидация валюты сейчас - ответственность курсов
+		self._rates_service.validate_currency(code=currency)
 
-	save(PORTFOLIOS_DIR, portfolios_lst)
+		portfolio = self._current_portfolio
+		if not portfolio:
+			raise RuntimeError("Портфель пользователя не загружен")
 
-def get_rate(from_v:str, to:str):
-	if from_v not in VALUTA:
-		print("Исходная валюта не существует")
+		# курс currency → USD
+		rate = self._rates_service.get_rate(currency, self._base_currency)
+		cost_usd = amount * rate
 
-	if to not in VALUTA:
-		print("Итоговая валюта не существует")
+		# TODO: не уверен, стоит ли тут менять на self._base_currency, потому что..
+		usd_wallet = portfolio.get_or_create_wallet(self._base_currency)
 
-	rate_dct = load(RATES_DIR)
+		wallet = portfolio.get_or_create_wallet(currency)
 
-	last_refresh_str = rate_dct["last_refresh"]
-	last_refresh = datetime.datetime.fromisoformat(last_refresh_str)
+		before = wallet.balance
 
-	# last_refresh aware (UTC)
-	if last_refresh.tzinfo is None:
-		last_refresh = last_refresh.replace(tzinfo=datetime.UTC)
+		usd_wallet.withdraw(cost_usd)
+		wallet.deposit(amount)
+		after = wallet.balance
 
-	current_time = datetime.datetime.now(datetime.UTC)
+		self._save_portfolio(portfolio)
 
-	if current_time - last_refresh < datetime.timedelta(minutes=5):
-		print(f"Курс {from_v}->{to}: {rate_dct[f"{from_v}_{to}"]}, "
-														f"(обновлен {last_refresh}")
-	else:
-		print("Нет данных и недоступен Parser ->")
-		print(f"Курс {from_v}->{to} недоступен. Повторите позже")
+		return {
+			"currency": currency,
+			"before": before,
+			"after": after,
+			"rate": rate,
+			"cost": cost_usd,
+		}
+
+	@log_action("SELL", verbose=True)
+	def sell(self, currency:str, amount:float):
+		if not self._current_user:
+			raise ValueError("Сначала нужно зарегистрироваться")
+
+		if currency == self._base_currency:
+			raise ValueError(f"{currency} - базовая валюта, ее нельзя продать, только пополнить")
+		if amount <= 0:
+			raise ValueError("'amount' должен быть положительным числом")
+
+		# валидация валюты сейчас - ответственность курсов
+		self._rates_service.validate_currency(code=currency)
+
+		portfolio = self._current_portfolio
+		if not portfolio:
+			raise RuntimeError("Портфель пользователя не загружен")
+
+		if not portfolio.has_wallet(currency):
+			raise WalletNotFoundError(currency)
+
+		wallet = portfolio.get_wallet(currency)
+		# TODO: точно стоит менять на self._base_currency?
+		usd_wallet = portfolio.get_wallet(self._base_currency)
+
+		before = wallet.balance
+		wallet.withdraw(amount)
+		after = wallet.balance
+
+		# расчетная стоимость
+		# TODO: точно стоит менять на self._base_currency?
+		rate = self._rates_service.get_rate(currency, self._base_currency)
+		cost = amount * rate
+		usd_wallet.deposit(cost)
+
+		self._save_portfolio(portfolio)
+
+		return {
+			"currency": currency,
+			"before": before,
+			"after": after,
+			"rate": rate,
+			"cost": cost,
+		}
+
+	def get_rate(self, from_v:str, to:str):
+
+		# if not self._current_user:
+		# 	raise ValueError("Сначала выполните login")
+
+		return self._rates_service.get_rate_pair(from_v, to)
+
+	@log_action("DEPOSIT", verbose=True)
+	def deposit(self, amount):
+		if not self._current_user:
+			raise ValueError("Сначала нужно зарегистрироваться")
+
+		portfolio = self._current_portfolio
+		if not portfolio:
+			raise RuntimeError("Портфель пользователя не загружен")
+
+		# TODO: точно стоит менять на self._base_currency?
+		usd_wallet = portfolio.get_or_create_wallet(self._base_currency)
+
+		before = usd_wallet.balance
+		usd_wallet.deposit(amount)
+		after = usd_wallet.balance
+
+		self._save_portfolio(portfolio)
+
+		# TODO: точно стоит менять на self._base_currency?
+		return {
+			"currency": self._base_currency,
+			"before": before,
+			"after": after,
+			"amount": amount,
+		}
+
+	def _save_portfolio(self, portfolio: Portfolio):
+			portfolios = self._load(self._portfolio_dir)
+
+			data = portfolio.to_dict()
+
+			for i, p in enumerate(portfolios):
+				if p["user_id"] == portfolio.user.user_id:
+					portfolios[i] = data
+					break
+			else:
+				portfolios.append(data)
+
+			self._save(self._portfolio_dir, portfolios)
+
+# TODO: все таки в buy/sell/deposit использовать "USD", base_currency из settings или
