@@ -1,6 +1,6 @@
 from valutatrade_hub.core.exceptions import ValutaTradeError
 from valutatrade_hub.core.usecases import UseCases
-from valutatrade_hub.core.utils import init_data_files
+
 from valutatrade_hub.infra.settings import SettingsLoader
 
 class ValutatradeCLI:
@@ -19,6 +19,8 @@ class ValutatradeCLI:
 			"show-portfolio": f"show-portfolio [--base <base> = {self._base_currency}]",
 			"get-rate": "get-rate --from <from currency> --to <to currency>",
 			"deposit": "deposit --amount",
+			"logout": "logout",
+			"whoami": "whoami",
 			"справка": "help [--command <command>]",
 			"Закончить работу": "exit"
 		}
@@ -65,7 +67,6 @@ class ValutatradeCLI:
 			raise ValueError(f"Отсутствуют обязательные аргументы: {args}")
 
 	def run(self):
-		init_data_files()
 		print("Добро пожаловать")
 		self.print_help()
 		while self._running:
@@ -148,6 +149,12 @@ class ValutatradeCLI:
 							f"Было: {result['before']:.2f} {self._base_currency}\n"
 							f"Стало: {result['after']:.2f} {self._base_currency}"
 						)
+
+					case "logout":
+						self._usecases.logout()
+
+					case "whoami":
+						print(self._usecases.whoami())
 
 					case "help":
 						self.print_help(params.get("command"))
