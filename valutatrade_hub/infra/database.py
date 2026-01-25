@@ -65,7 +65,7 @@ class DBManager:
 
 	def _save(self, model: StorageModel, data: Any):
 		if not isinstance(model, StorageModel):
-			raise TypeError(f"Нет модели {model.value}")
+			raise TypeError(f"Модель должна быть StorageModel, получил {type(model).__name__}")
 
 		path = self.build_path(model)
 		path.parent.mkdir(parents=True, exist_ok=True)
@@ -99,10 +99,7 @@ class DBManager:
 
 	def load_portfolio(self, user: User) -> dict | None:
 		portfolios = self._load(StorageModel.PORTFOLIOS)
-		return next(
-			(p for p in portfolios if p["user_id"] == user.user_id),
-			None
-		)
+		return next((p for p in portfolios if p["user_id"] == user.user_id), None)
 
 	def save_portfolio(self, portfolio: Portfolio) -> None:
 		portfolios = self._load(StorageModel.PORTFOLIOS)
@@ -119,6 +116,8 @@ class DBManager:
 
 	def create_portfolio(self, portfolio: Portfolio) -> None:
 		portfolios = self._load(StorageModel.PORTFOLIOS)
+		if any(p["user_id"] == portfolio.user.user_id for p in portfolios):
+			return
 		portfolios.append(portfolio.to_dict())
 		self._save(StorageModel.PORTFOLIOS, portfolios)
 

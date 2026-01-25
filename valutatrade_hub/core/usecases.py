@@ -112,7 +112,7 @@ class UseCases:
 			if user_dict:
 				self._current_user = User.from_dict(user_dict)
 				portfolio_dict = self._db.load_portfolio(self._current_user)
-				self._current_portfolio = Portfolio.from_dict(self._current_user, portfolio_dict)
+				self._current_portfolio = Portfolio.from_dict(self._current_user, portfolio_dict) if portfolio_dict else Portfolio(self._current_user)
 			else:
 				self._db.clear_session()
 				self._current_user = None
@@ -120,6 +120,7 @@ class UseCases:
 		else:
 			self._current_user = None
 			self._current_portfolio = None
+
 	@log_action("REGISTER")
 	def register(self, username:  str, password: str):
 		# password и username валидируются при инициализации экземпляра класса User ниже
@@ -162,7 +163,7 @@ class UseCases:
 
 	@log_action("LOGOUT")
 	def logout(self):
-		if self._db.load_session():
+		if self._current_user:
 			print(f"Вы вышли из аккаунта {self._current_user.username}")
 			self._current_user = None
 			self._current_portfolio = None
@@ -304,4 +305,10 @@ class UseCases:
 			"after": after,
 			"amount": amount,
 		}
+
+	def whoami(self) -> str:
+		if not self._current_user:
+			return "Вы не авторизованы"
+		return f"Текущий пользователь: {self._current_user.username}"
+
 # TODO: все таки в buy/sell/deposit использовать "USD", base_currency из settings или
