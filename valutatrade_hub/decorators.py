@@ -1,8 +1,8 @@
 
-import json
 import functools
+import json
 import logging
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 logger = logging.getLogger("valutatrade")
 

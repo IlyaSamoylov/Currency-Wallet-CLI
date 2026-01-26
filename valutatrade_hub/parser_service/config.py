@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import ClassVar
 
+
 @dataclass
 class ParserConfig:
 	# Ключ загружается из переменной окружения
@@ -31,3 +32,6 @@ class ParserConfig:
 	def __post_init__(self):
 		if not self.EXCHANGERATE_API_KEY:
 			raise RuntimeError("API-ключ не установлен.")
+
+	# частота обновления, с
+	RATES_UPDATE_INTERVAL = 60

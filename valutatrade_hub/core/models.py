@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
 import hashlib
 import secrets
+from datetime import datetime
 
 from valutatrade_hub.core.exceptions import InsufficientFundsError
 
+
 class User:
-	# todo: убедиться, что User будут передаваться правильные форматы date/password
 	def __init__(self, user_id: int, username: str, password: str,
 				registration_date: datetime | None = None):
 
-		# TODO: user_id должен быть уникальным, это будет контролироваться в usecases
 		self._user_id = user_id
 		# _username устанавливается через setter - внутри валидируется:
 		self.username = username

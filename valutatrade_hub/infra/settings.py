@@ -1,6 +1,9 @@
+import threading
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
+
 import tomli
+
 
 # TODO: Приспособить SettingsLoader куда нужно
 # TODO: Не забыть поставить правильную частоту обновления в pyproject.toml
@@ -21,7 +24,9 @@ class SettingsLoader:
 
 	Класс относится к инфраструктурному слою и не содержит бизнес-логики.
 	"""
-	_instanse = None # Атрибут класса для хранения единственного экземпляра
+	_instance = None # Атрибут класса для хранения единственного экземпляра
+	_instance_lock = threading.Lock()
+	_lock = threading.RLock()
 
 	def __new__(cls, *args, **kwargs):
 		"""
@@ -31,11 +36,12 @@ class SettingsLoader:
 		импортах и повторных вызовах будет использоваться один объект.
 		"""
 		# создание объекта класса
-		if cls._instanse is None:
-			#  создание нового экземпляра, если еще не был создан
-			cls._instanse = super().__new__(cls)
-			cls._instanse._initialized = False
-		return cls._instanse
+		if cls._instance is None:
+			with cls._instance_lock:
+				if cls._instance is None:
+					cls._instance = super().__new__(cls)
+					cls._instance._initialized = False
+		return cls._instance
 
 	def __init__(self):
 		"""
@@ -48,8 +54,8 @@ class SettingsLoader:
 			return
 		self._config : Dict[str, Any] = {}
 		self._config_file = Path("pyproject.toml")
-
-		self._load_config()
+		with self._lock:
+			self._load_config()
 		self._initialized = True
 
 	def _load_config(self):
@@ -75,9 +81,9 @@ class SettingsLoader:
 				print(f"Ошибка загрузки конфигурации из pyproject.toml: {e}")
 				self._config = {}
 
-		self.set_defaults()
+		self._set_defaults()
 
-	def set_defaults(self):
+	def _set_defaults(self):
 		"""
 		Загружает конфигурацию из файла pyproject.toml при необходимости.
 
@@ -112,8 +118,8 @@ class SettingsLoader:
 		:param default: значение, возвращаемое при отсутствии ключа
 		:return: значение конфигурации или default
 		"""
-
-		return self._config.get(key, default)
+		with self._lock:
+			return self._config.get(key, default)
 
 	def reload(self) -> None:
 		"""
@@ -122,6 +128,6 @@ class SettingsLoader:
 		Очищает текущий кэш конфигурации и повторно загружает данные
 		из pyproject.toml с последующим применением значений по умолчанию.
 		"""
-
-		self._config.clear()
-		self._load_config()
+		with self._lock:
+			self._config.clear()
+			self._load_config()

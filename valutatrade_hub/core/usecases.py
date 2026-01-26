@@ -1,16 +1,16 @@
 import datetime
 
 from valutatrade_hub.core.currencies import get_currency
-from valutatrade_hub.core.models import User, Portfolio
-from valutatrade_hub.infra.settings import SettingsLoader
 from valutatrade_hub.core.exceptions import ApiRequestError, WalletNotFoundError
-from valutatrade_hub.infra.database import DBManager
+from valutatrade_hub.core.models import Portfolio, User
 from valutatrade_hub.decorators import log_action
-
+from valutatrade_hub.infra.database import DBManager
+from valutatrade_hub.infra.settings import SettingsLoader
 from valutatrade_hub.parser_service.api_clients import PARSER_CLIENT_REGISTRY
-from valutatrade_hub.parser_service.updater import RatesUpdater
-from valutatrade_hub.parser_service.storage import RatesStorage
 from valutatrade_hub.parser_service.config import ParserConfig
+from valutatrade_hub.parser_service.storage import RatesStorage
+from valutatrade_hub.parser_service.updater import RatesUpdater
+
 
 # TODO: здесь, пока не напишем доступ к курсам через API или что там
 class RatesService:
@@ -29,7 +29,7 @@ class RatesService:
 		if from_ == to:
 			return 1.0
 
-		rates = self._load_rates()
+		rates = self._load_rates().get("pairs")
 
 		key = f"{from_}_{to}"
 		reverse_key = f"{to}_{from_}"
@@ -79,8 +79,8 @@ class RatesService:
 		key = f"{from_}_{to}"
 		reverse_key = f"{to}_{from_}"
 
-		rates = self._load_rates()
-
+		rates = self._load_rates().get("pairs")
+		print(rates)
 		# хотя бы один - прямой/обратный курс в rates есть
 		if key not in rates and reverse_key not in rates:
 			raise ApiRequestError(f"Курс {from_}->{to} недоступен")
@@ -185,7 +185,7 @@ class UseCases:
 			raise ValueError("Сначала выполните login")
 
 		if not self._current_portfolio.wallets:
-			raise ValueError(f"Портфель пуст")
+			raise ValueError("Портфель пуст")
 
 		currency = get_currency(base)
 

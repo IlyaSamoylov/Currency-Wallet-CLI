@@ -1,10 +1,11 @@
 import json
 import threading
-from pathlib import Path
-from valutatrade_hub.infra.settings import SettingsLoader
-from typing import Any
 from enum import Enum
-from valutatrade_hub.core.models import User, Portfolio
+from pathlib import Path
+from typing import Any
+
+from valutatrade_hub.core.models import Portfolio, User
+from valutatrade_hub.infra.settings import SettingsLoader
 
 
 class StorageModel(Enum):
@@ -15,7 +16,8 @@ class StorageModel(Enum):
 
 class DBManager:
 	_instance = None
-	_lock = threading.Lock()
+	_instance_lock = threading.Lock()
+	_lock = threading.RLock()
 
 	_DEFAULTS = {
 		StorageModel.USERS: [],
@@ -26,8 +28,10 @@ class DBManager:
 
 	def __new__(cls, *args, **kwargs):
 		if cls._instance is None:
-			cls._instance = super().__new__(cls)
-			cls._instance._initialized = False
+			with cls._instance_lock:
+				if cls._instance is None:
+					cls._instance = super().__new__(cls)
+					cls._instance._initialized = False
 		return cls._instance
 
 	def __init__(self):
@@ -59,11 +63,11 @@ class DBManager:
 				return json.load(f)
 
 		except FileNotFoundError:
-			if model in self._DEFAULTS:
-				default = self._DEFAULTS[model]
-				self._save(model, default)
+			default = self._DEFAULTS.get(model)
+			if default is not None:
+				self._atomic_save(path, default)
 				return default
-			raise FileNotFoundError(f"Хранилище для {model.name} не найдено")
+			raise
 
 	def _save(self, model: StorageModel, data: Any):
 		if not isinstance(model, StorageModel):
@@ -71,57 +75,62 @@ class DBManager:
 
 		path = self.build_path(model)
 		path.parent.mkdir(parents=True, exist_ok=True)
-		with open(path, "w", encoding="utf-8") as f:
-			json.dump(data, f, ensure_ascii=False, indent=4)
+		self._atomic_save(path, data)
 
-	def load_users(self) -> list[dict]:
-		return self._load(StorageModel.USERS)
+	def _atomic_save(self, path: Path, data: Any) -> None:
+		tmp_path = path.with_suffix(".tmp")
+		with open(tmp_path, "w", encoding="utf-8") as f:
+			json.dump(data, f, ensure_ascii=False, indent=4)
+		tmp_path.replace(path)
 
 	def get_user_by_username(self, username: str) -> dict | None:
-		users = self.load_users()
+		users = self._load(StorageModel.USERS)
 		return next((u for u in users if u["username"] == username), None)
 
 	def get_user_by_id(self, user_id: int) -> dict | None:
-		users = self.load_users()
+		users = self._load(StorageModel.USERS)
 		return next((u for u in users if u["user_id"] == user_id), None)
 
 	def create_user(self, username: str, password: str) -> User:
-		users = self.load_users()
+		with self._lock:
+			users = self._load(StorageModel.USERS)
 
-		if any(u["username"] == username for u in users):
-			raise ValueError(f"Пользователь '{username}' уже зарегистрирован. Войдите используя login")
+			if any(u["username"] == username for u in users):
+				raise ValueError(f"Пользователь '{username}' уже зарегистрирован. Войдите используя login")
 
-		next_id = max((u["user_id"] for u in users), default=0) + 1
+			next_id = max((u["user_id"] for u in users), default=0) + 1
 
-		user = User(next_id, username, password)
-		users.append(user.to_dict())
-		self._save(StorageModel.USERS, users)
+			user = User(next_id, username, password)
+			users.append(user.to_dict())
+			self._save(StorageModel.USERS, users)
 
-		return user
+			return user
 
 	def load_portfolio(self, user: User) -> dict | None:
 		portfolios = self._load(StorageModel.PORTFOLIOS)
 		return next((p for p in portfolios if p["user_id"] == user.user_id), None)
 
 	def save_portfolio(self, portfolio: Portfolio) -> None:
-		portfolios = self._load(StorageModel.PORTFOLIOS)
-		data = portfolio.to_dict()
+		with self._lock:
+			portfolios = self._load(StorageModel.PORTFOLIOS)
+			data = portfolio.to_dict()
 
-		for i, p in enumerate(portfolios):
-			if p["user_id"] == portfolio.user.user_id:
-				portfolios[i] = data
-				break
-		else:
-			portfolios.append(data)
+			for i, p in enumerate(portfolios):
+				if p["user_id"] == portfolio.user.user_id:
+					portfolios[i] = data
+					break
+			else:
+				portfolios.append(data)
 
-		self._save(StorageModel.PORTFOLIOS, portfolios)
+			self._save(StorageModel.PORTFOLIOS, portfolios)
 
 	def create_portfolio(self, portfolio: Portfolio) -> None:
-		portfolios = self._load(StorageModel.PORTFOLIOS)
-		if any(p["user_id"] == portfolio.user.user_id for p in portfolios):
-			return
-		portfolios.append(portfolio.to_dict())
-		self._save(StorageModel.PORTFOLIOS, portfolios)
+		with self._lock:
+			portfolios = self._load(StorageModel.PORTFOLIOS)
+			if any(p["user_id"] == portfolio.user.user_id for p in portfolios):
+				return
+			portfolios.append(portfolio.to_dict())
+			self._save(StorageModel.PORTFOLIOS, portfolios)
 
 	def load_rates(self) -> dict:
 		return self._load(StorageModel.RATES)
@@ -131,9 +140,11 @@ class DBManager:
 		return  data.get("user_id")
 
 	def save_session(self, user_id: int):
-		self._save(StorageModel.SESSION, {"user_id": user_id})
+		with self._lock:
+			self._save(StorageModel.SESSION, {"user_id": user_id})
 
 	def clear_session(self):
-		self._save(StorageModel.SESSION, {})
+		with self._lock:
+			self._save(StorageModel.SESSION, {})
 
 

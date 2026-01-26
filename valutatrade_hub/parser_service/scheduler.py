@@ -1,9 +1,9 @@
 import logging
 import time
 
-from updater import RatesUpdater
+from valutatrade_hub.parser_service.updater import RatesUpdater
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("valutatrade")
 
 
 class RatesScheduler:

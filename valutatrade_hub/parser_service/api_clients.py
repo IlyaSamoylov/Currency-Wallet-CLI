@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
+from typing import Dict, Type
+
 import requests
 from requests.exceptions import RequestException
-from typing import Type
-import time
 
-from typing import Dict
 from valutatrade_hub.core.exceptions import ApiRequestError
 from valutatrade_hub.parser_service.config import ParserConfig
 
@@ -121,7 +121,7 @@ class ExchangeRateApiClient(BaseApiClient):
 
 		try:
 			data = response.json()
-		except ValueError as e:
+		except ValueError:
 			raise ApiRequestError(
 				"Неверный ответ ExchangeRate-API"
 			)
