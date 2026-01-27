@@ -15,9 +15,11 @@ class RatesUpdater:
 		self._storage = storage
 		self._lock = threading.RLock()
 
-	def run_update(self) -> None:
+	def run_update(self, trigger: str) -> None:
 		with self._lock:
-			logger.info("Запуск обновления курсов")
+			log = logging.LoggerAdapter(logger,{"trigger": trigger})
+
+			log.info("Запуск обновления курсов")
 
 			combined_rates: Dict[str, Dict[str, object]] = {}
 			history_records: List[Dict[str, object]] = []
@@ -26,11 +28,11 @@ class RatesUpdater:
 
 			for client in self._clients:
 				client_name = client.__class__.__name__
-				logger.info("Запрос курсов у %s", client_name)
+				log.info("Запрос курсов у %s", client_name)
 
 				try:
 					rates = client.fetch_rates()
-					logger.info(
+					log.info(
 						"Успешно получены данные от %s (%d пар)",
 						client_name,	len(rates),
 					)
@@ -51,10 +53,10 @@ class RatesUpdater:
 					)
 
 				except ApiRequestError as e:
-					logger.error("Ошибка при работе с %s: %s",client_name, e)
+					log.error("Ошибка при работе с %s: %s",client_name, e)
 
 			if not combined_rates:
-				logger.warning("Не удалось получить курсы ни от одного источника")
+				log.warning("Не удалось получить курсы ни от одного источника")
 				return
 
 			existing = self._storage.load_rates()
@@ -71,7 +73,7 @@ class RatesUpdater:
 			if history_records:
 				self._storage.append_history(history_records)
 
-			logger.info(
+			log.info(
 				"Обновление завершено: %d пар, %d записей истории",
 				len(combined_rates),
 				len(history_records),
