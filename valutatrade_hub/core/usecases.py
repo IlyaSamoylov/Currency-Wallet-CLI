@@ -12,7 +12,6 @@ from valutatrade_hub.parser_service.storage import RatesStorage
 from valutatrade_hub.parser_service.updater import RatesUpdater
 
 
-# TODO: здесь, пока не напишем доступ к курсам через API или что там
 class RatesService:
 	"""
 	Сервис работы с курсами валют.
@@ -27,7 +26,9 @@ class RatesService:
 		Инициализация сервиса работы с курсами.
 		"""
 		self._settings = SettingsLoader()
-		self.cache_ttl = datetime.timedelta(seconds=self._settings.get("rates_ttl_seconds"))
+		self.cache_ttl = datetime.timedelta(
+			seconds=self._settings.get("rates_ttl_seconds")
+		)
 		self._db = DBManager()
 
 	def get_rate(self, from_: str, to: str) -> float:
@@ -69,7 +70,7 @@ class RatesService:
 		"""
 		Загрузить курсы валют из rates.json
 		Returns:
-			 dict: курсы валют
+			dict: курсы валют
 		"""
 		try:
 			return self._db.load_rates()
@@ -82,7 +83,7 @@ class RatesService:
 		Args:
 			rate (dict): курсы, которые нужно проверить
 		Returns:
-			 bool: свежие курсы или нет
+			bool: свежие курсы или нет
 		"""
 		last_refresh_str = rate.get("updated_at")
 
@@ -123,8 +124,10 @@ class RatesService:
 			raise ApiRequestError("Курс недоступен: кеш устарел и Parser недоступен")
 
 		# либо курс есть в rate и его берем, либо нет, тогда считаем по второму
-		req_rate = rates.get(key).get("rate") if rates.get(key) else 1 / rates[reverse_key]["rate"]
-		reverse_rate = rates.get(reverse_key).get("rate") if rates.get(reverse_key) else 1 / rates[key]["rate"]
+		req_rate = rates.get(key).get("rate") if rates.get(key) \
+			else 1 / rates[reverse_key]["rate"]
+		reverse_rate = rates.get(reverse_key).get("rate") if rates.get(reverse_key) \
+			else 1 / rates[key]["rate"]
 		updated_at = datetime.datetime.fromisoformat(ex_rate["updated_at"])
 
 		return {
@@ -139,7 +142,7 @@ class UseCases:
 	Описывает сценарии использования системы.
 	"""
 	def __init__(self, rates_service: RatesService, current_user: User | None = None,
-	             current_portfolio: Portfolio | None = None):
+					current_portfolio: Portfolio | None = None):
 		"""
 		Инициализация
 		Args:
@@ -159,7 +162,8 @@ class UseCases:
 			if user_dict:
 				self._current_user = User.from_dict(user_dict)
 				portfolio_dict = self._db.load_portfolio(self._current_user)
-				self._current_portfolio = Portfolio.from_dict(self._current_user, portfolio_dict) if portfolio_dict else Portfolio(self._current_user)
+				self._current_portfolio = Portfolio.from_dict(self._current_user,
+                  portfolio_dict) if portfolio_dict else Portfolio(self._current_user)
 			else:
 				self._db.clear_session()
 				self._current_user = None
@@ -187,7 +191,6 @@ class UseCases:
 
 		self._db.create_portfolio(new_portfolio)
 
-		# TODO: наверное лучше будет вернуть консоли сообщение для вывода на экран
 		print(f"Пользователь '{username}' зарегистрирован (id={new_user.user_id}). "
 				f"Войдите: login --username {username} --password", len(password)*"*")
 
@@ -260,7 +263,7 @@ class UseCases:
 	@log_action("BUY", verbose=True)
 	def buy(self, currency: str, amount: float) -> dict:
 		"""
-		Покупка валюты за базовую валюту. Покупка незалогиненному пользователю запрещена.
+		Покупка валюты за базовую валюту.Покупка незалогиненному пользователю запрещена.
 		Купить базовую валюту нельзя.
 		Автоматически создает соответствующий кошелек при первой покупке валюты.
 		Args:
@@ -280,7 +283,8 @@ class UseCases:
 			raise ValueError("Сначала нужно зарегистрироваться")
 
 		if currency == self._base_currency:
-			raise ValueError(f"{currency} - базовая валюта, ее нельзя купить, только пополнить")
+			raise ValueError(f"{currency} - базовая валюта, ее нельзя купить, только "
+								f"пополнить")
 
 		# amount уже валидируется в CLI
 		if amount <= 0:
@@ -316,7 +320,7 @@ class UseCases:
 			"before": before,
 			"after": after,
 			"rate": rate,
-			"cost": cost_usd,
+			"cost": cost_usd
 		}
 
 	@log_action("SELL", verbose=True)
@@ -328,7 +332,7 @@ class UseCases:
 			currency (str): валюта
 			amount (float): количество валюты
 		Returns:
-			 dict: return {
+			dict: return {
 			"currency": currency_code,
 			"before": before,
 			"after": after,
@@ -340,7 +344,8 @@ class UseCases:
 			raise ValueError("Сначала нужно зарегистрироваться")
 
 		if currency == self._base_currency:
-			raise ValueError(f"{currency} - базовая валюта, ее нельзя продать, только пополнить")
+			raise ValueError(f"{currency} - базовая валюта, ее нельзя продать, только "
+								f"пополнить")
 		if amount <= 0:
 			raise ValueError("'amount' должен быть положительным числом")
 
@@ -376,7 +381,7 @@ class UseCases:
 			"before": before,
 			"after": after,
 			"rate": rate,
-			"cost": cost,
+			"cost": cost
 		}
 
 	def get_rate(self, from_v:str, to:str):
@@ -386,7 +391,7 @@ class UseCases:
 			from_v: код исходной валюты
 			to: код целевой валюты
 		Returns:
-			 dict: {
+			dict: {
 					"rate": float,
 					"reverse_rate": float,
 					"updated_at": datetime
@@ -494,7 +499,7 @@ class UseCases:
 		Args:
 			amount (float): число базовой валюты для пополнения счета
 		Returns:
-			 dict: {
+			dict: {
 			"currency": self._base_currency,
 			"before": before,
 			"after": after,
@@ -527,7 +532,7 @@ class UseCases:
 		"""
 		Узнать, какой пользователь сейчас занимает сессию
 		Returns:
-			 str: имя текущего пользователя
+			str: имя текущего пользователя
 		"""
 		if not self._current_user:
 			return "Вы не авторизованы"

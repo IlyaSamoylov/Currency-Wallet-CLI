@@ -9,7 +9,7 @@ from valutatrade_hub.core.exceptions import InsufficientFundsError
 
 class User:
 	"""
-	    Модель пользователя
+		Модель пользователя
     """
 	def __init__(self, user_id: int, username: str, password: str,
 					registration_date: datetime | None = None):
@@ -36,7 +36,7 @@ class User:
 		Возвращает идентификатор пользователя
 
 		Returns:
-			 int: ID пользователя
+			int: ID пользователя
 		"""
 		return self._user_id
 
@@ -80,7 +80,7 @@ class User:
 		Возвращает соль, которая использовалась для хэширования пароля
 
 		Returns:
-			 str: соль
+			str: соль
 		"""
 		return self._salt
 
@@ -90,7 +90,7 @@ class User:
 		Возвращает дату регистрации пользователя
 
 		Returns:
-			 datetime: дата регистрации
+            datetime: дата регистрации
 		"""
 		return self._registration_date
 
@@ -99,7 +99,7 @@ class User:
 		Возвращает публичную информацию о пользователе без пароля
 
 		Returns:
-			 dict: информация о пользователе
+			dict: информация о пользователе
 		"""
 		return {
 			"User ID": self.user_id,
@@ -145,7 +145,7 @@ class User:
 		"""
 		Проверяет пароль
 
-		 Args:
+		Args:
 			password: введенный парль
 		Returns:
 			bool: True, если пароль верный
@@ -190,7 +190,7 @@ class User:
 		Преобразует пользователя в формат словаря
 
 		Returns:
-			 dict: словарь с данными пользователя
+			dict: словарь с данными пользователя
 		"""
 		u_dict = {
 			"user_id": self.user_id,
@@ -268,7 +268,7 @@ class Wallet:
 		Возвращает баланс на кошельке
 
 		Returns:
-			 float: баланс на кошельке
+			float: баланс на кошельке
 		"""
 		return self._balance
 
@@ -304,7 +304,7 @@ class Wallet:
 		Сериализация кошелька в словарь
 
 		Returns:
-			 dict: данные кошелька
+			dict: данные кошелька
 		"""
 		return {"balance": self._balance}
 
@@ -348,7 +348,7 @@ class Portfolio:
 			exchange_rates (dict): курсы валют
 			base_currency (str): базовая валюта
 		Returns:
-			 float: общая стоимость портфеля в базовой валюте
+			float: общая стоимость портфеля в базовой валюте
 		"""
 		total = 0.0
 		for wallet in self._wallets.values():
@@ -374,7 +374,7 @@ class Portfolio:
 		Args:
 			currency_code (str): код валюты
 		Returns:
-			 Wallet: валютный кошелек
+			Wallet: валютный кошелек
 		"""
 		if not self.has_wallet(currency_code):
 			raise ValueError(f"Кошелёк {currency_code} не найден")
@@ -386,7 +386,7 @@ class Portfolio:
 		Вернуть пользователя портфеля
 
 		Returns:
-			 User: пользователь портфеля
+			User: пользователь портфеля
 		"""
 		return self._user
 
@@ -396,7 +396,7 @@ class Portfolio:
 		Возвращает копию словаря кошельков
 
 		Returns:
-			 dict[str, Wallet]: словарь кошельков пользователя
+			dict[str, Wallet]: словарь кошельков пользователя
 		"""
 		return self._wallets.copy()
 
@@ -419,7 +419,7 @@ class Portfolio:
 		Сериализация портфеля в словарь
 
 		Returns:
-			 dict: данные портфеля
+			dict: данные портфеля
 		"""
 		return {
 			"user_id": self.user.user_id,
@@ -458,7 +458,7 @@ class Portfolio:
 		Args:
 			currency (str): код валюты
 		Returns:
-			 Wallet: кошелек пользователя
+			Wallet: кошелек пользователя
 		"""
 		if not self.has_wallet(currency):
 			return self.add_currency(currency)

@@ -1,27 +1,17 @@
-"""
-Конфигурация параметров парсеров и внешних API.
-
-Содержит:
-- URL внешних сервисов;
-- API-ключи;
-- списки поддерживаемых валют;
-- пути к файлам данных;
-- сетевые и временные параметры.
-"""
-
 import os
 from dataclasses import dataclass
-from typing import ClassVar
-from valutatrade_hub.infra.settings import SettingsLoader
 from pathlib import Path
-from valutatrade_hub.core.currencies import get_fiat_currencies, get_crypto_currencies
+from typing import ClassVar
+
+from valutatrade_hub.core.currencies import get_crypto_currencies, get_fiat_currencies
+from valutatrade_hub.infra.settings import SettingsLoader
 
 settings = SettingsLoader()
 
 @dataclass
 class ParserConfig:
 	"""
-	    Конфигурация сервисов получения валютных курсов.
+	Конфигурация сервисов получения валютных курсов.
     """
 	# API ключ загружается из переменной окружения
 	EXCHANGERATE_API_KEY: str = os.getenv("EXCHANGERATE_API_KEY")
@@ -35,9 +25,9 @@ class ParserConfig:
 	FIAT_CURRENCIES = get_fiat_currencies()
 	CRYPTO_CURRENCIES = get_crypto_currencies()
 	CRYPTO_ID_MAP: ClassVar[dict[str, str]] = {
-	    "BTC": "bitcoin",
-	    "ETH": "ethereum",
-	    "SOL": "solana",
+		"BTC": "bitcoin",
+		"ETH": "ethereum",
+		"SOL": "solana",
 	}
 
 	# пути

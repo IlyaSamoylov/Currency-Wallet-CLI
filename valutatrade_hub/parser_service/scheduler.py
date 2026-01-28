@@ -15,17 +15,17 @@ logger = logging.getLogger("valutatrade")
 
 class RatesScheduler:
 	"""
-	   Планировщик периодического вызова RatesUpdater.
+	Планировщик периодического вызова RatesUpdater.
     """
 
 	def __init__(self, updater: RatesUpdater, interval_seconds: int):
 		"""
 		Инициализация планировщика периодического фонового обновления курсов
-	   Args:
-	       updater (RatesUpdater): объект, выполняющий обновление курсов.
-	       interval_seconds (int): интервал обновления в секундах.
+		Args:
+			updater (RatesUpdater): объект, выполняющий обновление курсов.
+			interval_seconds (int): интервал обновления в секундах.
 
-	    Атрибут running (bool): флаг состояния планировщика.
+		Атрибут running (bool): флаг состояния планировщика.
 		"""
 
 		self._updater = updater
@@ -34,17 +34,15 @@ class RatesScheduler:
 
 	def start(self) -> None:
 		"""
-		    Запуск цикла планировщика.
+			Запуск цикла планировщика.
 
-		    Логирует начало работы, время до следующего обновления.
-		    Перехватывает KeyboardInterrupt для корректной остановки.
-		    Запущен в main как daemon - при выходе из приложения через exit
-		    автоматически остановится вместе с основным потоком.
-	    """
-		logger.info(
-			"Планировщик запущен, интервал обновления: %d секунд",
-			self._interval,
-		)
+			Логирует начало работы, время до следующего обновления.
+			Перехватывает KeyboardInterrupt для корректной остановки.
+			Запущен в main как daemon - при выходе из приложения через exit
+			автоматически остановится вместе с основным потоком.
+		"""
+		logger.info("Планировщик запущен, интервал обновления: %d секунд",
+			self._interval)
 		self._running = True
 
 		try:
@@ -56,10 +54,8 @@ class RatesScheduler:
 				elapsed = time.monotonic() - start_ts
 				sleep_time = max(0, self._interval - elapsed)
 
-				logger.info(
-					"Следующее обновление через %.1f секунд",
-					sleep_time,
-				)
+				logger.info("Следующее обновление через %.1f секунд",
+					sleep_time)
 
 				time.sleep(sleep_time)
 
@@ -67,11 +63,11 @@ class RatesScheduler:
 			logger.info("Планировщик остановлен пользователем")
 
 		except Exception as exc:
-			logger.exception("Критическая ошибка планировщика: %s",exc)
+			logger.exception("Критическая ошибка планировщика: %s", exc)
 			raise
 
 	def stop(self) -> None:
 		"""
-		    Останавливает цикл планировщика.
-	    """
+		Останавливает цикл планировщика.
+		"""
 		self._running = False

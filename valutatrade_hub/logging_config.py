@@ -11,6 +11,7 @@ from pathlib import Path
 
 from valutatrade_hub.infra.settings import SettingsLoader
 
+
 class SafeFormatter(logging.Formatter):
     """
     Безопасный форматтер логов. Гарантирует наличие поля trigger, обозначающее
@@ -18,14 +19,12 @@ class SafeFormatter(logging.Formatter):
     """
     def format(self, record):
         """
-        Форматирует запись лога, подставляя значение trigger при отсутствии.
+        Форматирует запись лога, подставляя значение trigger при отсутствии, иначе "-"
 
         Args:
             record: запись лога
         Returns:
             str: отформатированная строка лога
-        :param record:
-        :return:
         """
         if not hasattr(record, "trigger"):
             record.trigger = "-"

@@ -2,21 +2,22 @@ from valutatrade_hub.core.exceptions import ValutaTradeError
 from valutatrade_hub.core.usecases import UseCases
 from valutatrade_hub.infra.settings import SettingsLoader
 
+
 class ValutatradeCLI:
 	"""
-	    CLI-интерфейс для взаимодействия с ValutaTrade Hub.
+		CLI-интерфейс для взаимодействия с ValutaTrade Hub.
 
-	    Отвечает за:
-	    - считывание ввода с консоли
-	    - валидацию аргументов
-	    - вызов соответствующих команд UseCases
-	    - перехват доменных исключений и вывод сообщений пользователю.
+		Отвечает за:
+		- считывание ввода с консоли
+		- валидацию аргументов
+		- вызов соответствующих команд UseCases
+		- перехват доменных исключений и вывод сообщений пользователю.
 	"""
 	def __init__(self, usecases: UseCases):
 		"""
 		Инициализация CLI
 		Args:
-		 	usecases (UseCases): cлой бизнес логики приложения
+			usecases (UseCases): cлой бизнес логики приложения
 		"""
 		self._usecases = usecases
 		self._running = True
@@ -51,7 +52,7 @@ class ValutatradeCLI:
 		"""
 		Cчитывает и разбивает ввод с консоли на команду, аргументы и параметры
 		Returns:
-			 tuple[str, dict[str, str]]: команда и словарь аргументов.
+			tuple[str, dict[str, str]]: команда и словарь аргументов.
 		"""
 		raw = input(">").strip()
 		if not raw:
@@ -120,9 +121,9 @@ class ValutatradeCLI:
 						pword = params.get('password')
 						self._usecases.register(username=u_name, password=pword)
 						print(f"В подарок за регистрацию вы получаете стартовый баланс "
-					      f"100 {self._base_currency}.",
-					      f"Для пополнения баланса в базовой валюте "
-					      f"({self._base_currency} можете использовать команду deposit")
+							f"100 {self._base_currency}.",
+							f"Для пополнения баланса в базовой валюте "
+							f"({self._base_currency} используйте команду deposit")
 
 					case "login":
 						self._require_params(params, ["username", "password"])
@@ -179,7 +180,7 @@ class ValutatradeCLI:
 						print(f"Курс {from_v}→{to}: {result['rate']:.8f} "
 							f"(обновлено: {updated})")
 						print(f"Обратный курс {to}→{from_v}: "
-						      f"{result['reverse_rate']:.8f}")
+								f"{result['reverse_rate']:.8f}")
 
 					case "update-rates":
 						source = params.get("source")

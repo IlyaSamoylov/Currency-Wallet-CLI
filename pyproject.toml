@@ -33,7 +33,7 @@ ignore = []
 [tool.valutatrade]
 data_dir = "data"
 log_dir = "logs"
-log_level = "INFO"
+log_level = "DEBUG"
 log_format = "json"
 default_base_currency = "USD"
 rates_ttl_seconds = 300

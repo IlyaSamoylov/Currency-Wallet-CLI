@@ -4,7 +4,10 @@ import threading
 from valutatrade_hub.cli.interface import ValutatradeCLI
 from valutatrade_hub.core.usecases import RatesService, UseCases
 from valutatrade_hub.logging_config import setup_logging
-from valutatrade_hub.parser_service.api_clients import CoinGeckoClient, ExchangeRateApiClient
+from valutatrade_hub.parser_service.api_clients import (
+    CoinGeckoClient,
+    ExchangeRateApiClient,
+)
 from valutatrade_hub.parser_service.config import ParserConfig
 from valutatrade_hub.parser_service.scheduler import RatesScheduler
 from valutatrade_hub.parser_service.storage import RatesStorage
