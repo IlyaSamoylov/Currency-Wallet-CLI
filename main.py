@@ -19,26 +19,17 @@ def main():
 
     parser_config = ParserConfig()
 
-    # --- updater ---
-    clients = [
-        CoinGeckoClient(parser_config),
-        ExchangeRateApiClient(parser_config),
-    ]
+    # updater для курсов
+    clients = [CoinGeckoClient(parser_config), ExchangeRateApiClient(parser_config)]
 
     storage = RatesStorage(parser_config)
     updater = RatesUpdater(clients, storage)
 
-    # --- scheduler ---
-    scheduler = RatesScheduler(
-        updater=updater,
-        interval_seconds=parser_config.RATES_UPDATE_INTERVAL,
-    )
+    # scheduler периодически фоново обновляет курсы
+    scheduler = RatesScheduler(updater, parser_config.RATES_UPDATE_INTERVAL)
 
-    scheduler_thread = threading.Thread(
-        target=scheduler.start,
-        daemon=True,
-        name="rates-scheduler",
-    )
+    scheduler_thread = threading.Thread(target=scheduler.start, daemon=True,
+                                        name="rates-scheduler")
     scheduler_thread.start()
 
     rates_service = RatesService()

@@ -220,6 +220,30 @@ class Wallet:
 		self.currency_code = currency_code
 		self.balance = balance # инициируется через сеттер с валидацией
 
+	@property
+	def balance(self):
+		"""
+		Возвращает баланс на кошельке
+
+		Returns:
+			float: баланс на кошельке
+		"""
+		return self._balance
+
+	@balance.setter
+	def balance(self, value: float):
+		"""
+		Валидирует и устанавливает баланс
+
+		Args:
+			value (float): новое значение баланса
+		"""
+		if not isinstance(value, (int, float)):
+			raise ValueError("Некорректный тип данных")
+		if value < 0:
+			raise ValueError("Баланс не может быть меньше 0")
+		self._balance = value
+
 	def deposit(self, amount: float):
 		"""
 		Пополнить баланс кошелька
@@ -261,30 +285,6 @@ class Wallet:
 			"currency code": self.currency_code,
 			"balance": self._balance
 		}
-
-	@property
-	def balance(self):
-		"""
-		Возвращает баланс на кошельке
-
-		Returns:
-			float: баланс на кошельке
-		"""
-		return self._balance
-
-	@balance.setter
-	def balance(self, value: float):
-		"""
-		Валидирует и устанавливает баланс
-
-		Args:
-			value (float): новое значение баланса
-		"""
-		if not isinstance(value, (int, float)):
-			raise ValueError("Некорректный тип данных")
-		if value < 0:
-			raise ValueError("Баланс не может быть меньше 0")
-		self._balance = value
 
 	@classmethod
 	def from_dict(cls, w_dict: dict, cur_code: str = 'USD') -> Wallet:
