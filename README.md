@@ -21,7 +21,7 @@
 
 ### Настройка API-ключей
 
-Для работы с ExchangeRate API необходимо указать API-ключ. Получить его можно, зарегистрировавшись на [сайте](https://www.exchangerate-api.com/).
+Для обновления фиатных курсов через ExchangeRate API необходимо указать API-ключ. Получить его можно, зарегистрировавшись на [сайте](https://www.exchangerate-api.com/).
 
 Приложение поддерживает **два способа хранения ключа**.
 #### Способ 1. Файл с секретом 
@@ -88,7 +88,7 @@ setx EXCHANGERATE_API_KEY "<ваш API-ключ>"
 6. **Начните использовать**
    ## через make:
    ```bash
-    make run
+    make project
    ```
    ## через poetry:
    ```bash
@@ -131,32 +131,7 @@ setx EXCHANGERATE_API_KEY "<ваш API-ключ>"
 
 ### `session.json`
 Хранит id и ник последнего авторизованного пользователя
-## Пример работы
-```
-$ poetry run project
-Добро пожаловать
-Доступные команды:
-  register        → register --username <username> --password <password>
-  login           → login --username <username> --password <password>
-  buy             → buy --currency <currency> --amount <amount>
-  sell            → sell --currency <currency> --amount <amount>
-  show-portfolio  → show-portfolio [--base <base> = USD]
-  get-rate        → get-rate --from <from currency> --to <to currency>
->register --username Volodya --password 1111
-Пользователь 'Volodya' зарегистрирован (id=3). Войдите: login --username Volodya --password ****
->login --username Volodya --password 1111
-Вы вошли как 'Volodya'
->show-portfolio
-Портфель пуст
->buy --currency ETH --amount 1
->sell --currency ETH --amount 0.5
->show-portfolio
-Портфель пользователя 'Volodya' (база: USD):
-- ETH: 0.5 -> 1860.0
-----------
-ИТОГО: 1860.0 USD
->get-rate --from_v ETH --to USD
-Нет данных и недоступен Parser ->
-Курс ETH->USD недоступен. Повторите позже
->exit
-```
+
+## Демонстрация работы
+
+[![asciinema demo](https://asciinema.org/a/VmTOAMcATTKNBjMm)](https://asciinema.org/a/VmTOAMcATTKNBjMm)
