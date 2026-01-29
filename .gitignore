@@ -227,3 +227,6 @@ logs/
 
 # директория с API-ключом
 .secrets/
+
+# директория с записями asciinema
+records/
