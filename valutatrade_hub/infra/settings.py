@@ -3,7 +3,7 @@ import threading
 from pathlib import Path
 from typing import Any, Dict
 
-import tomli
+import tomllib
 
 logger = logging.getLogger("valutatrade")
 
@@ -55,7 +55,7 @@ class SettingsLoader:
 		if self._config_file.exists() and not self._config:
 			try:
 				with open(self._config_file, "rb") as f:
-					data = tomli.load(f)
+					data = tomllib.load(f)
 					self._config = data.get("tool", {}).get("valutatrade", {})
 			except Exception as e:
 				logger.warning("Ошибка загрузки конфигурации из pyproject.toml: %s",
