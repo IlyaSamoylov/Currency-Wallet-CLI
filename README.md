@@ -134,4 +134,4 @@ setx EXCHANGERATE_API_KEY "<ваш API-ключ>"
 
 ## Демонстрация работы
 
-[![asciinema demo](https://asciinema.org/a/VmTOAMcATTKNBjMm)](https://asciinema.org/a/VmTOAMcATTKNBjMm)
+[![asciicast](https://asciinema.org/a/VmTOAMcATTKNBjMm.svg)](https://asciinema.org/a/VmTOAMcATTKNBjMm)
