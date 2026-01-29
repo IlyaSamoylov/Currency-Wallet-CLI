@@ -157,7 +157,7 @@ class ExchangeRateApiClient(BaseApiClient):
 				raise ApiRequestError(f"Неправильный тип курса для {currency}: "
 										f"{rate!r} (type={type(rate).__name__})")
 
-			pair = f"{currency}_{self._config.BASE_CURRENCY}"
+			pair = f"{self._config.BASE_CURRENCY}_{currency}"
 			result[pair] = {
 				"rate": rate,
 				"meta": {
