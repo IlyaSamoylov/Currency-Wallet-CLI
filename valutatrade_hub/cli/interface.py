@@ -151,11 +151,12 @@ class ValutatradeCLI:
 						result = self._usecases.buy(currency=currency, amount=amount)
 
 						print(f"Покупка выполнена: {amount:.4f} {currency} по курсу "
-								f"{result['rate']:.2f} USD/{currency} \n"
-								f"Изменения в портфеле: \n"
+							f"{result['rate']:.2f} {self._base_currency}/{currency} \n"
+							f"Изменения в портфеле: \n"
 							f"- {currency}: было {result['before']:.4f} → " 
 							f"стало {result['after']:.4f} \n"
-						f"Оценочная стоимость покупки: {result['cost']:.2f} USD")
+						f"Оценочная стоимость покупки: {result['cost']:.2f} "
+						      f"{self._base_currency}")
 
 					case "sell":
 						self._require_params(params, ["currency", "amount"])
@@ -164,11 +165,12 @@ class ValutatradeCLI:
 						result = self._usecases.sell(currency=currency, amount=amount)
 
 						print(f"Продажа выполнена: {amount:.4f} {currency} по курсу "
-								f"{result['rate']:.2f} USD/{currency} \n"
+							f"{result['rate']:.2f} {self._base_currency}/{currency} \n"
 								f"Изменения в портфеле: \n"
 							f"- {currency}: было {result['before']:.4f} → " 
 							f"стало {result['after']:.4f} \n"
-						f"Оценочная выручка: {result['cost']:.2f} USD")
+						f"Оценочная выручка: {result['cost']:.2f} "
+						      f"{self._base_currency}")
 
 					case "get-rate":
 						self._require_params(params, ["from", "to"])

@@ -147,8 +147,8 @@ class UseCases:
 		Инициализация
 		Args:
 			rates_service (RatesService): сервис работы с курсами валют
-			currenct_user (User): текущий пользователь, занимающий сессию
-			currenct_portfolio (Portfolio): портфель текущенго пользователя
+			current_user (User): текущий пользователь, занимающий сессию
+			current_portfolio (Portfolio): портфель текущенго пользователя
 		"""
 		self._rates_service = rates_service
 		self._settings = SettingsLoader()
@@ -187,7 +187,7 @@ class UseCases:
 		new_user = self._db.create_user(username, password)
 
 		new_portfolio = Portfolio(new_user)
-		new_portfolio.add_currency(self._base_currency, init_balance=100.00)
+		new_portfolio.add_wallet(self._base_currency, init_balance=100.00)
 
 		self._db.create_portfolio(new_portfolio)
 
@@ -260,6 +260,14 @@ class UseCases:
 
 		return self._current_portfolio.view(currency.code, self._rates_service)
 
+	def _ensure_base_wallet(self) -> None:
+		if not self._current_portfolio:
+			raise RuntimeError("Портфель не загружен")
+
+		if not self._current_portfolio.has_wallet(self._base_currency):
+			self._current_portfolio.add_wallet(self._base_currency)
+			self._db.save_portfolio(self._current_portfolio)
+
 	@log_action("BUY", verbose=True)
 	def buy(self, currency: str, amount: float) -> dict:
 		"""
@@ -272,11 +280,11 @@ class UseCases:
 
 		Returns:
 			dict: {
-			"currency": currency_code,
-			"before": before,
-			"after": after,
-			"rate": rate,
-			"cost": cost_usd,
+			"currency": ,
+			"before": ,
+			"after": ,
+			"rate": ,
+			"cost": ,
 		} : информация об операции: валюта, до/после покупки, курс покупки, выручка
 		"""
 		if not self._current_user:
@@ -290,6 +298,8 @@ class UseCases:
 		if amount <= 0:
 			raise ValueError("'amount' должен быть положительным числом")
 
+		self._ensure_base_wallet()
+
 		# валидация валюты сейчас - ответственность валюты
 		currency = get_currency(currency)
 		currency_code = currency.code
@@ -298,18 +308,18 @@ class UseCases:
 		if not portfolio:
 			raise RuntimeError("Портфель пользователя не загружен")
 
-		# курс currency → USD
+		# курс currency → base
 		rate = self._rates_service.get_rate(currency_code, self._base_currency)
-		cost_usd = amount * rate
+		cost_base = amount * rate
 
-		usd_wallet = portfolio.get_or_create_wallet(self._base_currency)
+		base_wallet = portfolio.get_or_create_wallet(self._base_currency)
 
 		# если кошелька для этой валюты нет - создадим
 		wallet = portfolio.get_or_create_wallet(currency_code)
 
 		before = wallet.balance
 
-		usd_wallet.withdraw(cost_usd)
+		base_wallet.withdraw(cost_base)
 		wallet.deposit(amount)
 		after = wallet.balance
 
@@ -320,7 +330,7 @@ class UseCases:
 			"before": before,
 			"after": after,
 			"rate": rate,
-			"cost": cost_usd
+			"cost": cost_base
 		}
 
 	@log_action("SELL", verbose=True)
@@ -349,6 +359,8 @@ class UseCases:
 		if amount <= 0:
 			raise ValueError("'amount' должен быть положительным числом")
 
+		self._ensure_base_wallet()
+
 		# валидация валюты
 		currency = get_currency(currency)
 		currency_code = currency.code
@@ -362,7 +374,7 @@ class UseCases:
 
 		wallet = portfolio.get_wallet(currency_code)
 
-		usd_wallet = portfolio.get_wallet(self._base_currency)
+		base_wallet = portfolio.get_wallet(self._base_currency)
 
 		before = wallet.balance
 		wallet.withdraw(amount)
@@ -372,7 +384,7 @@ class UseCases:
 
 		rate = self._rates_service.get_rate(currency_code, self._base_currency)
 		cost = amount * rate
-		usd_wallet.deposit(cost)
+		base_wallet.deposit(cost)
 
 		self._db.save_portfolio(portfolio)
 
@@ -494,7 +506,7 @@ class UseCases:
 	def deposit(self, amount: float) -> dict:
 		"""
 		Пополнение счета базовой валютой. Для решения проблем с недостаточным числом
-		средств для купли-продажи, если 100 USD не хватает, например для покупки крипты
+		базовой валюты для купли-продажи крипты
 
 		Args:
 			amount (float): число базовой валюты для пополнения счета
@@ -513,11 +525,11 @@ class UseCases:
 		if not portfolio:
 			raise RuntimeError("Портфель пользователя не загружен")
 
-		usd_wallet = portfolio.get_or_create_wallet(self._base_currency)
+		base_wallet = portfolio.get_or_create_wallet(self._base_currency)
 
-		before = usd_wallet.balance
-		usd_wallet.deposit(amount)
-		after = usd_wallet.balance
+		before = base_wallet.balance
+		base_wallet.deposit(amount)
+		after = base_wallet.balance
 
 		self._db.save_portfolio(portfolio)
 

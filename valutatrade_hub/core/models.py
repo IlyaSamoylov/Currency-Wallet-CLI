@@ -324,7 +324,7 @@ class Portfolio:
 		self._user = user
 		self._wallets = wallets if wallets is not None else {}
 
-	def add_currency(self, currency_code: str, init_balance: float = 0.0):
+	def add_wallet(self, currency_code: str, init_balance: float = 0.0):
 		"""
 		Добавляет новый валютный кошелек
 
@@ -461,6 +461,6 @@ class Portfolio:
 			Wallet: кошелек пользователя
 		"""
 		if not self.has_wallet(currency):
-			return self.add_currency(currency)
+			return self.add_wallet(currency)
 		return self.get_wallet(currency)
 
