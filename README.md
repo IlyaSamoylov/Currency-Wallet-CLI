@@ -1,4 +1,4 @@
-# Проект 3 - CLI приложение: имитация валютного кошелька
+# CLI приложение: имитация валютного кошелька
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![Poetry](https://img.shields.io/badge/Poetry-управление_зависимостями-orange)
@@ -53,8 +53,8 @@ setx EXCHANGERATE_API_KEY "<ваш API-ключ>"
 
 1. **Клонируйте репозиторий:**
    ```bash
-   git clone https://github.com/IlyaSamoylov/finalproject_Samoylov_M25-555
-   cd finalproject_Samoylov_M25-555
+   git clone https://github.com/IlyaSamoylov/Currency-Wallet-CLI
+   cd Currency-Wallet-CLI
    ```
 
 2. **Установите poetry (если не установлен)**
